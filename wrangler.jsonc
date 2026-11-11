@@ -1,7 +1,10 @@
-// Cloudflare Workers: serve the built site in dist/ as static files.
+// Cloudflare Workers: the website from dist/ plus the waterfront room server (worker/).
 {
   "name": "alongside",
+  "main": "worker/index.ts",
   "compatibility_date": "2026-11-10",
   "assets": { "directory": "./dist" },
+  "durable_objects": { "bindings": [{ "name": "ROOM", "class_name": "Room" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
   "previews": {} // lets PR builds make a preview link (`wrangler preview`)
 }

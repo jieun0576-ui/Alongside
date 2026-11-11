@@ -2,11 +2,10 @@ import {
   BoxGeometry, Color, Fog, Group, HemisphereLight, DirectionalLight, Mesh,
   MeshLambertMaterial, PlaneGeometry, Scene,
 } from 'three';
+import { WALK } from './protocol';
 
 // shortcut: placeholder shapes until Hoon's Maya models (glTF) are ready.
 
-// The strip people can walk on, in metres. x runs along the shore, z toward the lake (negative).
-const WALK = { minX: -28, maxX: 28, minZ: -2.5, maxZ: 2.5 };
 
 export function clampToWalk(x: number, z: number) {
   return {
