@@ -2,5 +2,6 @@
 {
   "name": "alongside",
   "compatibility_date": "2026-11-10",
-  "assets": { "directory": "./dist" }
+  "assets": { "directory": "./dist" },
+  "previews": {} // lets PR builds make a preview link (`wrangler preview`)
 }
