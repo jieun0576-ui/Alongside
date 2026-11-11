@@ -22,8 +22,7 @@ export const MAX_BOATS = 50; // oldest drops off first
 export const RUN_MINUTES = [5, 10, 20];
 export const MAX_RUNNERS = 4;
 export const RUN_PACE = 2.5; // metres per second while your phone says you're moving: an easy jog
-export const INVITE_EVERY_MS = 5_000;
-export const INVITE_LIFE_MS = 60_000;
+export const AWAY_MS = 60_000; // a runner who loses connection keeps their place this long
 
 // Floating Thoughts: a boat is only ever one of these colours, never free text.
 export const BOAT_COLOURS = ['#f2c6c2', '#f6dfa4', '#bfe0c5', '#b9d4ee', '#d8c8ec', '#fbfaf6'];
@@ -33,29 +32,37 @@ export type Pose = { x: number; z: number; s: 0 | 1 };
 export type Person = Pose & { id: string };
 export type Boat = { x: number; c: number; age: number }; // age in seconds when sent
 
-// Where someone is in a run: d = metres along the trail when sent, m = 1 while moving, l = lane 0-3.
-export type Runner = { id: string; d: number; m: 0 | 1; l: number };
+// Where someone is in a run: d = metres along the trail when sent, m = 1 while moving, l = lane 0 or 1,
+// a = 1 while their connection is lost (they keep their place for AWAY_MS).
+export type Runner = { id: string; d: number; m: 0 | 1; l: number; a?: 1 };
+// A raised thumb: `host` is whose run it is (the host's own thumb has host === id).
+export type Thumb = { id: string; host: string };
 
 export type ClientMsg =
   | ({ t: 'move' } & Pose)
   | { t: 'boat'; c: number }
   | { t: 'stone'; x: number; z: number }
-  | { t: 'invite'; id: string; d: number } // ask someone to run for d minutes
-  | { t: 'accept'; id: string } // say yes to that person's invitation
+  | { t: 'raise' } // raise my thumb: I'm looking for people to run with
+  | { t: 'join'; id: string } // tap someone's raised thumb to run with them
+  | { t: 'lower' } // lower my thumb (the host lowering it cancels the run for everyone)
+  | { t: 'start'; d: number } // host only: start a run of d minutes with whoever joined
   | { t: 'motion'; m: 0 | 1 } // my phone says I'm moving (1) or resting (0)
   | { t: 'quit' }; // leave my run early
 
 export type ServerMsg =
-  | { t: 'welcome'; id: string; others: Person[]; boats: Boat[]; runners: Runner[] }
+  | { t: 'welcome'; id: string; others: Person[]; boats: Boat[]; runners: Runner[]; thumbs: Thumb[] }
   | ({ t: 'join' } & Person)
   | ({ t: 'move' } & Person)
   | { t: 'leave'; id: string }
   | { t: 'boat'; b: Boat }
   | { t: 'ripple'; id: string; x: number; z: number } // id: who threw it, so phones can draw the stone's flight
-  | { t: 'invite'; id: string; d: number } // someone asks you to run for d minutes
-  | { t: 'runner'; r: Runner } // someone started, moved or paused in a run (sent to everyone)
-  | { t: 'run'; ids: string[]; left: number } // to the runners only: who is in your run, ms left
-  | { t: 'runEnd'; id: string; x: number; z: number } // a run ended for this person; they stand here
+  | { t: 'thumb'; id: string; host: string | null } // a thumb went up (host) or down (null)
+  | { t: 'runner'; r: Runner } // someone started, moved, paused or lost connection in a run (to everyone)
+  // To the runners only: ids[n - 1] is runner number n ('' once they've left), ms left,
+  // and your own key for getting back in after a lost connection.
+  | { t: 'run'; ids: string[]; left: number; k: string }
+  // A run ended for this person and they stand here; f = 1 when the time was up (everyone together).
+  | { t: 'runEnd'; id: string; x: number; z: number; f: 0 | 1 }
   | { t: 'full' }; // sent just before the server closes a socket it has no room for
 
 export function inWalk(x: number, z: number) {
@@ -69,13 +76,13 @@ export function inLake(x: number, z: number) {
 const num = (v: unknown): v is number => typeof v === 'number';
 const cm = (v: number) => Math.round(v * 100) / 100;
 // Ids are the server's own random UUIDs.
-const isId = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f-]{36}$/.test(v);
+export const isId = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f-]{36}$/.test(v);
 
-// The trail is walked back and forth: metres run -> x along the shore. Lanes sit side by side.
+// The trail is run back and forth: metres run -> x along the shore. Pairs run side by side.
 export function trailSpot(d: number, lane: number) {
   const len = WALK.maxX - WALK.minX;
   const t = d % (2 * len);
-  return { x: t < len ? WALK.minX + t : WALK.maxX - (t - len), z: TRAIL.minZ + 0.6 + lane * 0.6 };
+  return { x: t < len ? WALK.minX + t : WALK.maxX - (t - len), z: TRAIL.minZ + 1 + lane }; // lanes 0 and 1: two side by side
 }
 
 // The only messages a phone may send. Anything else, or any extra field, is dropped.
@@ -95,8 +102,9 @@ export function parseClient(raw: unknown): ClientMsg | null {
     return { t, c: c as number };
   }
   if (t === 'stone' && num(x) && num(z) && inLake(x, z)) return { t, x: cm(x), z: cm(z) };
-  if (t === 'invite' && isId(id) && RUN_MINUTES.includes(d as number)) return { t, id, d: d as number };
-  if (t === 'accept' && isId(id)) return { t, id };
+  if (t === 'raise' || t === 'lower') return { t };
+  if (t === 'join' && isId(id)) return { t, id };
+  if (t === 'start' && RUN_MINUTES.includes(d as number)) return { t, d: d as number };
   if (t === 'motion' && (m as Record<string, unknown>).m === 0) return { t, m: 0 };
   if (t === 'motion' && (m as Record<string, unknown>).m === 1) return { t, m: 1 };
   if (t === 'quit') return { t };

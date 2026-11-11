@@ -2,7 +2,8 @@ import type { ClientMsg, ServerMsg } from './protocol';
 
 // One live connection to the waterfront room. If it drops or the room is full, it shows a quiet
 // note and tries again, waiting longer each time: 3 s, 6 s, 12 s ... up to 1 min.
-export function connect(onMessage: (m: ServerMsg) => void, onOpen: () => void) {
+// key(): during a run, the secret that lets the room give you back your place after a lost connection.
+export function connect(onMessage: (m: ServerMsg) => void, onOpen: () => void, key: () => string) {
   const note = document.createElement('p');
   note.style.cssText =
     'position:fixed;left:16px;right:16px;bottom:24px;margin:0;text-align:center;' +
@@ -12,7 +13,8 @@ export function connect(onMessage: (m: ServerMsg) => void, onOpen: () => void) {
   let ws: WebSocket;
   let wait = 3000;
   const open = () => {
-    ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+    const k = key();
+    ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws${k ? `?k=${k}` : ''}`);
     ws.onopen = onOpen;
     let full = false;
     ws.onmessage = (e) => {

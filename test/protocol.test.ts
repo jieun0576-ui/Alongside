@@ -60,14 +60,15 @@ test('boats and stones wait for their cool-down', () => {
 
 test('run messages: only real ids, set durations and on/off motion', () => {
   const id = '123e4567-e89b-12d3-a456-426614174000';
-  assert.deepEqual(parseClient(`{"t":"invite","id":"${id}","d":10}`), { t: 'invite', id, d: 10 });
-  assert.deepEqual(parseClient(`{"t":"accept","id":"${id}"}`), { t: 'accept', id });
+  assert.deepEqual(parseClient('{"t":"raise"}'), { t: 'raise' });
+  assert.deepEqual(parseClient(`{"t":"join","id":"${id}"}`), { t: 'join', id });
+  assert.deepEqual(parseClient('{"t":"start","d":10}'), { t: 'start', d: 10 });
   assert.deepEqual(parseClient('{"t":"motion","m":1}'), { t: 'motion', m: 1 });
   assert.deepEqual(parseClient('{"t":"quit","x":1}'), { t: 'quit' });
   for (const bad of [
-    `{"t":"invite","id":"${id}","d":7}`, // not 5, 10 or 20
-    '{"t":"invite","id":"<b>hi</b>","d":5}', // not an id
-    '{"t":"accept","id":5}',
+    '{"t":"start","d":7}', // not 5, 10 or 20
+    '{"t":"join","id":"<b>hi</b>"}', // not an id
+    '{"t":"join","id":5}',
     '{"t":"motion","m":2}',
   ]) assert.equal(parseClient(bad), null, bad);
 });
@@ -77,5 +78,5 @@ test('the trail goes back and forth inside the walkable strip', () => {
   assert.equal(trailSpot(56, 0).x, 28);
   assert.equal(trailSpot(60, 0).x, 24);
   assert.equal(trailSpot(112, 0).x, -28);
-  for (let l = 0; l < 4; l++) assert.ok(trailSpot(0, l).z > 2 && trailSpot(0, l).z < 5);
+  for (let l = 0; l < 2; l++) assert.ok(trailSpot(0, l).z > 2 && trailSpot(0, l).z < 5);
 });

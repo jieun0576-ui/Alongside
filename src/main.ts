@@ -1,5 +1,5 @@
 import {
-  CapsuleGeometry, Group, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera,
+  CapsuleGeometry, Color, Fog, Group, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera,
   Raycaster, RingGeometry, Vector2, Vector3, WebGLRenderer,
 } from 'three';
 import { buildWorld, clampToWalk } from './world';
@@ -81,7 +81,32 @@ function setRunner(r: Runner) {
   const w = r.id === myId ? me : others.get(r.id);
   if (!w) return;
   sit(w, false);
+  if (!w.run) {
+    // Just started (or came back): carried straight to their place on the trail.
+    const spot = trailSpot(r.d, r.l);
+    w.mesh.position.set(spot.x, STAND_Y, spot.z);
+  }
   w.run = { ...r, at: performance.now() };
+  // Lost connection: the avatar waits, faded, until they're back.
+  const mat = w.mesh.material as MeshLambertMaterial;
+  mat.transparent = !!r.a;
+  mat.opacity = r.a ? 0.35 : 1;
+}
+
+// The key that gives you back your place in a run after a lost connection or a reload.
+let runKey = '';
+try {
+  runKey = sessionStorage.getItem('runKey') ?? '';
+} catch {
+  // storage blocked: reconnecting still works, reloading the page doesn't
+}
+function saveKey(k: string) {
+  runKey = k;
+  try {
+    sessionStorage.setItem('runKey', k);
+  } catch {
+    // see above
+  }
 }
 
 let myId = '';
@@ -89,7 +114,8 @@ let runIds: string[] = [];
 let allMoving = false;
 // Everyone in your run moving at once: a soft chime, then quiet until it happens again.
 function checkTogether() {
-  const all = runIds.length > 1 && runIds.every((id) => (id === myId ? me : others.get(id))?.run?.m === 1);
+  const ids = runIds.filter(Boolean);
+  const all = ids.length > 1 && ids.every((id) => (id === myId ? me : others.get(id))?.run?.m === 1);
   if (all && !allMoving) run.feel();
   allMoving = all;
 }
@@ -110,9 +136,13 @@ const send = connect(
     if (m.t === 'welcome') {
       for (const id of [...others.keys()]) removeOther(id); // fresh list after a reconnect
       for (const o of m.others) others.set(o.id, addWalker('#e3d3c0', o));
+      if (m.id !== myId) {
+        if (run.running) endMyRun(false); // a new person to the room: that run is over for you
+        me.run = undefined;
+      }
       myId = m.id;
-      if (run.running) endMyRun(); // a new connection is a new person to the room
       m.runners.forEach(setRunner);
+      run.onWelcome(m.thumbs);
       if (!boatsLoaded) m.boats.forEach(life.addBoat); // boats already afloat when you arrive
       boatsLoaded = true;
     } else if (m.t === 'join') {
@@ -123,24 +153,27 @@ const send = connect(
       if (w) setGoal(w, { x: m.x, z: m.z, s: m.s });
     } else if (m.t === 'leave') {
       removeOther(m.id);
-    } else if (m.t === 'invite') {
-      run.onInvite(m.id, m.d);
+    } else if (m.t === 'thumb') {
+      run.onThumb(m.id, m.host);
     } else if (m.t === 'runner') {
       setRunner(m.r);
       checkTogether();
     } else if (m.t === 'run') {
       runIds = m.ids;
-      run.onRun(m.left);
+      saveKey(m.k);
+      run.onRun(m.ids, m.left, m.k);
       checkTogether();
     } else if (m.t === 'runEnd') {
       const w = m.id === myId ? me : others.get(m.id);
       if (w) {
+        // Carried to where the run ended: their spot on the trail, or the shared spot by the water.
         w.run = undefined;
-        w.mesh.position.y = STAND_Y;
+        w.mesh.position.set(m.x, STAND_Y, m.z);
         w.goal = { x: m.x, z: m.z, s: 0 };
-        w.arrived = false;
+        w.arrived = true;
+        (w.mesh.material as MeshLambertMaterial).opacity = 1;
       }
-      if (m.id === myId) endMyRun();
+      if (m.id === myId) endMyRun(m.f === 1);
     } else if (m.t === 'boat') {
       life.addBoat(m.b);
     } else if (m.t === 'ripple') {
@@ -150,13 +183,35 @@ const send = connect(
     }
   },
   () => send({ t: 'move', ...me.goal }), // tell the room where you are as soon as you connect
+  () => runKey,
 );
 let boatsLoaded = false;
-const run = runTogether(send);
-function endMyRun() {
+const run = runTogether(send, headOf, () => myId);
+function endMyRun(together: boolean) {
   runIds = [];
   allMoving = false;
-  run.onEnd();
+  saveKey('');
+  run.onEnd(together);
+  if (together) glow = 1;
+}
+
+// Where someone's head is on screen (for thumbs and runner numbers), or null when they're not in view.
+function headOf(id: string) {
+  const w = id === myId ? me : others.get(id);
+  if (!w) return null;
+  const s = onScreen(w.mesh.position, 1.7);
+  return head.z < 1 ? s : null;
+}
+
+// Finishing together: the sky warms for a few seconds. shortcut: a tint only; the real sunset is step 6.
+const sky = new Color('#f3d9c4');
+const dusk = new Color('#f0a57c');
+let glow = 0;
+function warmSky(dt: number) {
+  if (glow <= 0) return;
+  glow = Math.max(0, glow - dt / 8);
+  const c = (scene.background as Color).copy(sky).lerp(dusk, Math.sin(Math.PI * glow));
+  (scene.fog as Fog).color.copy(c);
 }
 
 // A small ring where you tapped, fading out over a second.
@@ -195,13 +250,6 @@ renderer.domElement.addEventListener('pointerup', (e) => {
     new Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1),
     camera,
   );
-  // Run Together: tap near someone who isn't already running to invite them (a finger is wider than a capsule).
-  const person = aiming ? undefined : [...others].find(([, w]) => {
-    if (w.run) return false;
-    const s = onScreen(w.mesh.position, 1);
-    return Math.hypot(e.clientX - s.x, e.clientY - s.y) < 44;
-  });
-  if (person) return run.offerInvite(person[0]);
   if (run.running) return; // while running, your phone's motion moves you, not taps
   const hit = raycaster.intersectObjects([...benches, ...ground, lake], true)[0];
   if (!hit) return;
@@ -306,6 +354,7 @@ function update(dt: number) {
   life.update(dt);
   stones.update(dt);
   run.update(dt);
+  warmSky(dt);
   showTools();
   if (aiming) {
     const h = headOnScreen();
