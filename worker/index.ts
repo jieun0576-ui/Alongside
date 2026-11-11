@@ -131,13 +131,13 @@ export class Room extends DurableObject<Env> {
       if (!host.run) {
         host.run = { id: crypto.randomUUID(), ends: now + inv.d * 60_000, l: 0, d: 0, m: 0, since: now };
       }
+      from.ws.serializeAttachment(host); // so members() below counts them
       const run = host.run;
       const lanes = this.members(run.id).map((x) => x.seat.run!.l);
       if (lanes.length >= MAX_RUNNERS) return;
       const l = [0, 1, 2, 3].find((n) => !lanes.includes(n))!;
       // You join right beside the person who asked you.
       seat.run = { id: run.id, ends: run.ends, l, d: runner(host, now).d, m: 0, since: now };
-      from.ws.serializeAttachment(host);
       ws.serializeAttachment(seat);
       this.broadcast(null, { t: 'runner', r: runner(host, now) });
       this.broadcast(null, { t: 'runner', r: runner(seat, now) });
@@ -204,7 +204,8 @@ export class Room extends DurableObject<Env> {
 
   private endRun(ws: WebSocket, seat: Seat, now: number) {
     const r = runner(seat, now);
-    const at = trailSpot(r.d, r.l);
+    const spot = trailSpot(r.d, r.l);
+    const at = { x: Math.round(spot.x * 100) / 100, z: spot.z };
     const runId = seat.run!.id;
     delete seat.run;
     seat.p = { ...seat.p, x: at.x, z: at.z, s: 0 };
