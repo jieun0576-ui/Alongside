@@ -354,7 +354,11 @@ function update(dt: number) {
   stones.update(dt);
   run.update(dt);
   show.update(dt);
-  edges.update(new Map([...others].filter(([id]) => runIds.includes(id))), camera); // only the people in your run
+  // Only the people in your run, each shown by their runner number.
+  edges.update(
+    runIds.flatMap((id, i) => (others.has(id) ? [{ id, at: others.get(id)!.mesh.position, label: String(i + 1) }] : [])),
+    camera,
+  );
   showTools();
   if (aiming) {
     const h = headOnScreen();
