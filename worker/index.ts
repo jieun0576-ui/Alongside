@@ -82,7 +82,7 @@ export class Room extends DurableObject<Env> {
     const back = key && isId(key) ? aways.find((a) => a.run.k === key && a.until > now) : undefined;
     if (back) await this.setAways(aways.filter((a) => a !== back));
     // The server picks your id, so nobody can speak for someone else.
-    const me: Person = back?.p ?? { id: crypto.randomUUID(), x: 3, z: 1, s: 0 };
+    const me: Person = back?.p ?? { id: crypto.randomUUID(), x: 3, z: 1, s: 0, k: 0 };
     const others = [...seats.map((s) => s.p), ...aways.filter((a) => a !== back).map((a) => a.p)];
     const runners = [
       ...seats.filter((s) => s.run).map((s) => runner(s.p, s.run!, now)),
@@ -113,7 +113,11 @@ export class Room extends DurableObject<Env> {
     if (((ws.deserializeAttachment() as Seat).run?.ends ?? Infinity) <= now) await this.alarm();
     const seat = ws.deserializeAttachment() as Seat;
 
-    if (m.t === 'move') {
+    if (m.t === 'look') {
+      seat.p = { ...seat.p, k: m.k };
+      ws.serializeAttachment(seat);
+      this.broadcast(ws, { t: 'look', id: seat.p.id, k: m.k });
+    } else if (m.t === 'move') {
       if (seat.run) return; // while running, the run decides where you are
       seat.p = { ...seat.p, x: m.x, z: m.z, s: m.s };
       ws.serializeAttachment(seat);

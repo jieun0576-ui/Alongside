@@ -1,6 +1,5 @@
 import {
-  CapsuleGeometry, Group, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera,
-  Raycaster, RingGeometry, Vector2, Vector3, WebGLRenderer,
+  Group, Mesh, MeshBasicMaterial, Object3D, PerspectiveCamera, Raycaster, RingGeometry, Vector2, Vector3, WebGLRenderer,
 } from 'three';
 import { buildWorld, clampToWalk } from './world';
 import { connect } from './net';
@@ -9,8 +8,10 @@ import { stoneAim } from './aim';
 import { runTogether } from './run';
 import { fireworks } from './fireworks';
 import { edgeMarkers } from './edges';
+import { HEIGHT, dropLook, fade, makeLook, play, type Look } from './characters';
+import { pickCharacter } from './picker';
 import {
-  BOAT_COLOURS, BOAT_EVERY_MS, RUN_PACE, STONE_EVERY_MS, STONE_REACH, inLake, trailSpot, type Pose, type Runner,
+  BOAT_COLOURS, BOAT_EVERY_MS, CHARACTERS, RUN_PACE, STONE_EVERY_MS, STONE_REACH, inLake, trailSpot, type Pose, type Runner,
 } from './protocol';
 
 const renderer = new WebGLRenderer({ antialias: true });
@@ -22,25 +23,49 @@ const life = lakeLife(scene);
 const stones = stoneAim(scene);
 const camera = new PerspectiveCamera(55, 1, 0.1, 300);
 
-// Everyone, you included, is a soft capsule walking toward a goal and maybe sitting there.
-const STAND_Y = 0.7;
+// Everyone, you included, is a character walking toward a goal and maybe sitting there.
+// body sits on the ground at their feet; the character model inside it arrives once loaded.
 const WALK_SPEED = 1.6; // metres per second, an easy stroll
-const body = new CapsuleGeometry(0.25, 0.9, 4, 12);
+const SEAT_Y = 0.45; // lifts a sitting character so they rest on the bench seat
 // run: set while this person is in a run; `at` is when we heard (performance.now() ms).
-type Walker = { mesh: Mesh; goal: Pose; arrived: boolean; run?: Runner & { at: number } };
+type Walker = {
+  body: Group; k: number; look?: Look; away: boolean; seated: boolean;
+  goal: Pose; arrived: boolean; run?: Runner & { at: number };
+};
 
 function sit(w: Walker, seated: boolean) {
-  w.mesh.scale.y = seated ? 0.7 : 1;
-  w.mesh.position.y = seated ? 0.94 : STAND_Y; // seated: bottom of the capsule rests on the seat
+  w.seated = seated;
+  w.body.position.y = seated ? SEAT_Y : 0;
+  if (seated) w.body.rotation.y = Math.PI; // facing the lake
 }
 
-function addWalker(color: string, at: Pose): Walker {
-  const mesh = new Mesh(body, new MeshLambertMaterial({ color }));
-  mesh.position.set(at.x, STAND_Y, at.z);
-  scene.add(mesh);
-  const w: Walker = { mesh, goal: at, arrived: true };
+function addWalker(at: Pose, k: number): Walker {
+  const body = new Group();
+  body.position.set(at.x, 0, at.z);
+  body.rotation.y = Math.PI; // facing the lake
+  scene.add(body);
+  const w: Walker = { body, k: -1, away: false, seated: false, goal: at, arrived: true };
+  setLook(w, k);
   sit(w, at.s === 1);
   return w;
+}
+
+// Swap in character k once its file has loaded (unless they chose again, or left, meanwhile).
+function setLook(w: Walker, k: number) {
+  if (w.k === k) return;
+  w.k = k;
+  makeLook(k)
+    .then((look) => {
+      if (w.k !== k || !w.body.parent) return dropLook(look);
+      if (w.look) {
+        w.body.remove(w.look.model);
+        dropLook(w.look);
+      }
+      w.look = look;
+      w.body.add(look.model);
+      fade(look, w.away);
+    })
+    .catch(() => {}); // shortcut: a character that fails to load stays invisible until they choose again
 }
 
 function setGoal(w: Walker, goal: Pose) {
@@ -50,33 +75,39 @@ function setGoal(w: Walker, goal: Pose) {
 }
 
 function step(w: Walker, dt: number) {
-  if (w.run) return runStep(w, w.run, dt);
-  if (w.arrived) return;
-  const p = w.mesh.position;
-  const dx = w.goal.x - p.x;
-  const dz = w.goal.z - p.z;
-  const dist = Math.hypot(dx, dz);
-  const stride = WALK_SPEED * dt;
-  if (dist <= stride) {
-    p.x = w.goal.x;
-    p.z = w.goal.z;
-    w.arrived = true;
-    if (w.goal.s) sit(w, true);
-  } else {
-    p.x += (dx / dist) * stride;
-    p.z += (dz / dist) * stride;
+  if (w.run) runStep(w, w.run, dt);
+  else if (!w.arrived) {
+    const p = w.body.position;
+    const dx = w.goal.x - p.x;
+    const dz = w.goal.z - p.z;
+    const dist = Math.hypot(dx, dz);
+    const stride = WALK_SPEED * dt;
+    if (dist > 0.01) w.body.rotation.y = Math.atan2(dx, dz); // face where they're going
+    if (dist <= stride) {
+      p.x = w.goal.x;
+      p.z = w.goal.z;
+      w.arrived = true;
+      if (w.goal.s) sit(w, true);
+    } else {
+      p.x += (dx / dist) * stride;
+      p.z += (dz / dist) * stride;
+    }
   }
+  if (!w.look) return;
+  play(w.look, w.seated ? 'sit' : w.run ? (w.run.m ? 'sprint' : 'idle') : w.arrived ? 'idle' : 'walk');
+  w.look.mixer.update(dt);
 }
 
 // Runners glide to their spot on the trail; it moves on at a steady pace while their phone says moving.
 function runStep(w: Walker, r: Runner & { at: number }, dt: number) {
   const d = r.d + (r.m ? (RUN_PACE * (performance.now() - r.at)) / 1000 : 0);
   const spot = trailSpot(d, r.l);
-  const p = w.mesh.position;
+  const p = w.body.position;
   const k = Math.min(1, dt * 4);
+  // Facing along the trail, whichever way this leg of it goes.
+  w.body.rotation.y = trailSpot(d + 0.1, r.l).x > spot.x ? Math.PI / 2 : -Math.PI / 2;
   p.x += (spot.x - p.x) * k;
   p.z += (spot.z - p.z) * k;
-  p.y = STAND_Y + (r.m ? Math.abs(Math.sin(d * 2.4)) * 0.08 : 0); // a little bounce in each stride
 }
 
 function setRunner(r: Runner) {
@@ -86,13 +117,12 @@ function setRunner(r: Runner) {
   if (!w.run) {
     // Just started (or came back): carried straight to their place on the trail.
     const spot = trailSpot(r.d, r.l);
-    w.mesh.position.set(spot.x, STAND_Y, spot.z);
+    w.body.position.set(spot.x, 0, spot.z);
   }
   w.run = { ...r, at: performance.now() };
   // Lost connection: the avatar waits, faded, until they're back.
-  const mat = w.mesh.material as MeshLambertMaterial;
-  mat.transparent = !!r.a;
-  mat.opacity = r.a ? 0.35 : 1;
+  w.away = !!r.a;
+  if (w.look) fade(w.look, w.away);
 }
 
 // The key that gives you back your place in a run after a lost connection or a reload.
@@ -122,14 +152,21 @@ function checkTogether() {
   allMoving = all;
 }
 
-const me = addWalker('#f6f1ea', { x: Math.round(Math.random() * 800 - 400) / 100, z: 1, s: 0 }); // spread arrivals out
+// The character you were last time, if this phone remembers.
+let saved = 0;
+try {
+  saved = Math.min(Math.max(Number(localStorage.getItem('look')) || 0, 0), CHARACTERS.length - 1);
+} catch {
+  // storage blocked: you start as the first one
+}
+const me = addWalker({ x: Math.round(Math.random() * 800 - 400) / 100, z: 1, s: 0 }, saved); // spread arrivals out
 const others = new Map<string, Walker>();
 
 function removeOther(id: string) {
   const w = others.get(id);
   if (!w) return;
-  scene.remove(w.mesh);
-  (w.mesh.material as MeshLambertMaterial).dispose();
+  scene.remove(w.body);
+  if (w.look) dropLook(w.look);
   others.delete(id);
 }
 
@@ -137,7 +174,7 @@ const send = connect(
   (m) => {
     if (m.t === 'welcome') {
       for (const id of [...others.keys()]) removeOther(id); // fresh list after a reconnect
-      for (const o of m.others) others.set(o.id, addWalker('#e3d3c0', o));
+      for (const o of m.others) others.set(o.id, addWalker(o, o.k));
       if (m.id !== myId) {
         if (run.running) endMyRun(false); // a new person to the room: that run is over for you
         me.run = undefined;
@@ -149,7 +186,10 @@ const send = connect(
       boatsLoaded = true;
     } else if (m.t === 'join') {
       removeOther(m.id);
-      others.set(m.id, addWalker('#e3d3c0', m));
+      others.set(m.id, addWalker(m, m.k));
+    } else if (m.t === 'look') {
+      const w = others.get(m.id);
+      if (w) setLook(w, m.k);
     } else if (m.t === 'move') {
       const w = others.get(m.id);
       if (w) setGoal(w, { x: m.x, z: m.z, s: m.s });
@@ -170,21 +210,27 @@ const send = connect(
       if (w) {
         // Carried to where the run ended: their spot on the trail, or the shared spot by the water.
         w.run = undefined;
-        w.mesh.position.set(m.x, STAND_Y, m.z);
+        w.body.position.set(m.x, 0, m.z);
+        w.body.rotation.y = Math.PI; // facing the water
         w.goal = { x: m.x, z: m.z, s: 0 };
         w.arrived = true;
-        (w.mesh.material as MeshLambertMaterial).opacity = 1;
+        w.away = false;
+        if (w.look) fade(w.look, false);
       }
       if (m.id === myId) endMyRun(m.f === 1);
     } else if (m.t === 'boat') {
       life.addBoat(m.b);
     } else if (m.t === 'ripple') {
       const w = others.get(m.id);
-      if (w) stones.fly(w.mesh.position.clone().setY(1.2), m.x, m.z, () => life.ripple(m.x, m.z));
+      if (w) stones.fly(w.body.position.clone().setY(HAND_Y), m.x, m.z, () => life.ripple(m.x, m.z));
       else life.ripple(m.x, m.z);
     }
   },
-  () => send({ t: 'move', ...me.goal }), // tell the room where you are as soon as you connect
+  () => {
+    // Tell the room who and where you are as soon as you connect.
+    send({ t: 'look', k: me.k });
+    send({ t: 'move', ...me.goal });
+  },
   () => runKey,
 );
 let boatsLoaded = false;
@@ -194,14 +240,14 @@ function endMyRun(together: boolean) {
   allMoving = false;
   saveKey('');
   run.onEnd(together);
-  if (together) show.start(me.mesh.position.x);
+  if (together) show.start(me.body.position.x);
 }
 
 // Where someone's head is on screen (for thumbs and runner numbers), or null when they're not in view.
 function headOf(id: string) {
   const w = id === myId ? me : others.get(id);
   if (!w) return null;
-  const s = onScreen(w.mesh.position, 1.7);
+  const s = onScreen(w.body.position, HEIGHT + 0.2);
   return head.z < 1 ? s : null;
 }
 
@@ -222,14 +268,15 @@ let tapAge = 1;
 const NEAR_WATER_Z = -1.2; // the front of the boardwalk, benches included
 let aiming = false;
 let lastThrow = -Infinity;
-const hand = () => me.mesh.position.clone().setY(1.2);
+const HAND_Y = HEIGHT * 0.75;
+const hand = () => me.body.position.clone().setY(HAND_Y);
 const head = new Vector3();
 let swipeFromHead = false;
 function onScreen(at: Vector3, y: number) {
   head.copy(at).setY(y).project(camera);
   return { x: ((head.x + 1) / 2) * innerWidth, y: ((1 - head.y) / 2) * innerHeight };
 }
-const headOnScreen = () => onScreen(me.mesh.position, 1.4);
+const headOnScreen = () => onScreen(me.body.position, HEIGHT * 0.9);
 
 // Tap (not drag) picks where to go.
 const raycaster = new Raycaster();
@@ -309,7 +356,7 @@ function setAiming(on: boolean) {
   boatButton.style.display = aiming ? 'none' : '';
   arrow.style.display = aiming ? 'block' : 'none';
   palette.style.display = 'none';
-  if (aiming) stones.aim(hand(), me.mesh.position.x, -8); // start straight out in front of you
+  if (aiming) stones.aim(hand(), me.body.position.x, -8); // start straight out in front of you
   else stones.hide();
 }
 
@@ -340,7 +387,7 @@ let nearWater = false;
 function showTools() {
   // No boats or stones during a run; a run that starts mid-aim puts the stone away.
   if (run.running && aiming) setAiming(false);
-  const near = !run.running && (aiming || (me.arrived && me.mesh.position.z <= NEAR_WATER_Z));
+  const near = !run.running && (aiming || (me.arrived && me.body.position.z <= NEAR_WATER_Z));
   if (near === nearWater) return;
   nearWater = near;
   tools.style.display = near ? 'flex' : 'none';
@@ -350,13 +397,14 @@ function showTools() {
 const camGoal = new Vector3();
 function update(dt: number) {
   step(me, dt);
+  if (picking) me.body.rotation.y = 0; // facing you while you choose
   life.update(dt);
   stones.update(dt);
   run.update(dt);
   show.update(dt);
   // Only the people in your run, each shown by their runner number.
   edges.update(
-    runIds.flatMap((id, i) => (others.has(id) ? [{ id, at: others.get(id)!.mesh.position, label: String(i + 1) }] : [])),
+    runIds.flatMap((id, i) => (others.has(id) ? [{ id, at: others.get(id)!.body.position, label: String(i + 1) }] : [])),
     camera,
   );
   showTools();
@@ -371,10 +419,13 @@ function update(dt: number) {
   for (const w of others.values()) step(w, dt);
   // Camera eases along behind you, looking out over the lake.
   // While aiming it steps to the side, so the stone's arc can be seen.
-  if (aiming) camGoal.set(me.mesh.position.x + 6, 5, me.mesh.position.z + 7);
-  else camGoal.set(me.mesh.position.x, 6, me.mesh.position.z + 10);
+  // While you choose your character, it comes up close.
+  if (picking) camGoal.set(me.body.position.x, 1.4, me.body.position.z + 3.4);
+  else if (aiming) camGoal.set(me.body.position.x + 6, 5, me.body.position.z + 7);
+  else camGoal.set(me.body.position.x, 6, me.body.position.z + 10);
   camera.position.lerp(camGoal, 1 - Math.exp(-3 * dt));
-  camera.lookAt(me.mesh.position.x, 0, me.mesh.position.z - 5);
+  if (picking) camera.lookAt(me.body.position.x, 0.8, me.body.position.z);
+  else camera.lookAt(me.body.position.x, 0, me.body.position.z - 5);
 }
 
 function resize() {
@@ -386,7 +437,23 @@ function resize() {
 addEventListener('resize', resize);
 resize();
 
-camera.position.set(me.mesh.position.x, 6, 11);
+// First thing on opening: choose who you'll be, while the waterfront carries on around you.
+let picking = true;
+camera.position.set(me.body.position.x, 1.4, me.body.position.z + 3.4);
+pickCharacter(
+  saved,
+  (k) => setLook(me, k),
+  (k) => {
+    picking = false;
+    me.body.rotation.y = Math.PI; // turn to the water
+    send({ t: 'look', k });
+    try {
+      localStorage.setItem('look', String(k));
+    } catch {
+      // storage blocked: you'll choose again next time
+    }
+  },
+);
 let last = 0;
 renderer.setAnimationLoop((t) => {
   const dt = Math.min((t - last) / 1000, 0.1); // clamp so a paused tab doesn't jump

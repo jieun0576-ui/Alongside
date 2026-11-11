@@ -23,13 +23,15 @@ export const RUN_MINUTES = [5, 10, 20];
 export const MAX_RUNNERS = 4;
 export const RUN_PACE = 2.5; // metres per second while your phone says you're moving: an easy jog
 export const AWAY_MS = 60_000; // a runner who loses connection keeps their place this long
+// The characters you can be, by number (files in public/characters).
+export const CHARACTERS = ['female', 'knight', 'male', 'worker', 'zombie'];
 
 // Floating Thoughts: a boat is only ever one of these colours, never free text.
 export const BOAT_COLOURS = ['#f2c6c2', '#f6dfa4', '#bfe0c5', '#b9d4ee', '#d8c8ec', '#fbfaf6'];
 
 // Where someone is heading, and whether they sit down when they get there.
 export type Pose = { x: number; z: number; s: 0 | 1 };
-export type Person = Pose & { id: string };
+export type Person = Pose & { id: string; k: number }; // k: which character they chose
 export type Boat = { x: number; c: number; age: number }; // age in seconds when sent
 
 // Where someone is in a run: d = metres along the trail when sent, m = 1 while moving, l = lane 0 or 1,
@@ -47,13 +49,15 @@ export type ClientMsg =
   | { t: 'lower' } // lower my thumb (the host lowering it cancels the run for everyone)
   | { t: 'start'; d: number } // host only: start a run of d minutes with whoever joined
   | { t: 'motion'; m: 0 | 1 } // my phone says I'm moving (1) or resting (0)
-  | { t: 'quit' }; // leave my run early
+  | { t: 'quit' } // leave my run early
+  | { t: 'look'; k: number }; // I'm this character
 
 export type ServerMsg =
   | { t: 'welcome'; id: string; others: Person[]; boats: Boat[]; runners: Runner[]; thumbs: Thumb[] }
   | ({ t: 'join' } & Person)
   | ({ t: 'move' } & Person)
   | { t: 'leave'; id: string }
+  | { t: 'look'; id: string; k: number } // someone chose a character
   | { t: 'boat'; b: Boat }
   | { t: 'ripple'; id: string; x: number; z: number } // id: who threw it, so phones can draw the stone's flight
   | { t: 'thumb'; id: string; host: string | null } // a thumb went up (host) or down (null)
@@ -108,6 +112,10 @@ export function parseClient(raw: unknown): ClientMsg | null {
   if (t === 'motion' && (m as Record<string, unknown>).m === 0) return { t, m: 0 };
   if (t === 'motion' && (m as Record<string, unknown>).m === 1) return { t, m: 1 };
   if (t === 'quit') return { t };
+  const k = (m as Record<string, unknown>).k;
+  if (t === 'look' && Number.isInteger(k) && (k as number) >= 0 && (k as number) < CHARACTERS.length) {
+    return { t, k: k as number };
+  }
   return null;
 }
 

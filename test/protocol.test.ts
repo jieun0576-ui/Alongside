@@ -28,6 +28,9 @@ test('rejects anything a phone should not send', () => {
     '{"t":"boat","c":"#ff0000"}', // no free colours, no text
     '{"t":"stone","x":0,"z":1}', // on the boardwalk, not the lake
     '{"t":"stone","x":0,"z":-500}', // far out
+    '{"t":"look","k":5}', // no such character
+    '{"t":"look","k":-1}',
+    '{"t":"look","k":0.5}',
     'null',
     `{"t":"move","x":0,"z":0,"s":0,"pad":"${'a'.repeat(100)}"}`, // too long
   ];
@@ -79,4 +82,9 @@ test('the trail goes back and forth inside the walkable strip', () => {
   assert.equal(trailSpot(60, 0).x, 24);
   assert.equal(trailSpot(112, 0).x, -28);
   for (let l = 0; l < 2; l++) assert.ok(trailSpot(0, l).z > 2 && trailSpot(0, l).z < 5);
+});
+
+test('accepts a character choice', () => {
+  assert.deepEqual(parseClient('{"t":"look","k":0}'), { t: 'look', k: 0 });
+  assert.deepEqual(parseClient('{"t":"look","k":4,"name":"x"}'), { t: 'look', k: 4 });
 });
