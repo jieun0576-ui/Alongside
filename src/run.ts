@@ -47,8 +47,10 @@ export function runTogether(send: (m: ClientMsg) => void, headOf: (id: string) =
   const numbers: HTMLSpanElement[] = [];
   let runIds: string[] = [];
 
-  let left = 0; // ms left in my run, or 0 when not running
-  let overdue = 0;
+  // When my run ends, by this page's clock (performance.now() ms), or 0 when not running. Kept as an end
+  // time, not a countdown, so the timer keeps going while you're on another page or app.
+  let endAt = 0;
+  let nudged = false;
   let key = '';
   let duration = RUN_MINUTES[1];
   let moving: 0 | 1 = 0;
@@ -73,7 +75,7 @@ export function runTogether(send: (m: ClientMsg) => void, headOf: (id: string) =
   }
 
   function setMoving(m: 0 | 1) {
-    if (m === moving || !left) return;
+    if (m === moving || !endAt) return;
     moving = m;
     fallback.textContent = m ? "I'm moving" : "I'm resting";
     send({ t: 'motion', m });
@@ -82,7 +84,7 @@ export function runTogether(send: (m: ClientMsg) => void, headOf: (id: string) =
   // Moving = the phone has been shaking for the last 2 seconds, the way it does in a pocket while jogging.
   addEventListener('devicemotion', (e) => {
     const g = e.accelerationIncludingGravity;
-    if (!left || !g || g.x === null) return;
+    if (!endAt || !g || g.x === null) return;
     sensed = true;
     fallback.style.display = 'none';
     const t = e.timeStamp;
@@ -104,7 +106,7 @@ export function runTogether(send: (m: ClientMsg) => void, headOf: (id: string) =
     }
   }
   document.addEventListener('visibilitychange', () => {
-    if (left && document.visibilityState === 'visible') keepAwake();
+    if (endAt && document.visibilityState === 'visible') keepAwake();
   });
 
   // A soft two-note chime (and a short buzz where phones allow it) when everyone in the run is moving.
@@ -128,7 +130,7 @@ export function runTogether(send: (m: ClientMsg) => void, headOf: (id: string) =
   // What I see at the bottom while my thumb is up: the host's choices, or a way to step out.
   function showLobby() {
     const mine = thumbs.get(myId());
-    raise.style.display = mine || left ? 'none' : '';
+    raise.style.display = mine || endAt ? 'none' : '';
     if (!mine) return void (lobby.style.display = 'none');
     if (mine.host === myId()) {
       const joined = [...thumbs.values()].filter((t) => t.host === myId()).length - 1;
@@ -169,7 +171,7 @@ export function runTogether(send: (m: ClientMsg) => void, headOf: (id: string) =
         const me = myId();
         const mine = thumbs.get(me);
         if (id === me) return send({ t: 'lower' });
-        if (!mine && !left) {
+        if (!mine && !endAt) {
           unlock();
           send({ t: 'join', id: thumbs.get(id)!.host });
         }
@@ -182,7 +184,7 @@ export function runTogether(send: (m: ClientMsg) => void, headOf: (id: string) =
 
   return {
     get running() {
-      return left > 0;
+      return endAt > 0;
     },
     key: () => key,
     feel,
@@ -197,7 +199,7 @@ export function runTogether(send: (m: ClientMsg) => void, headOf: (id: string) =
 
     // You're in a run (or someone joined, left or came back).
     onRun(ids: string[], msLeft: number, k: string) {
-      if (!left) {
+      if (!endAt) {
         keepAwake();
         samples = [];
         sensed = false;
@@ -205,11 +207,11 @@ export function runTogether(send: (m: ClientMsg) => void, headOf: (id: string) =
         fallback.textContent = "I'm resting";
         fallback.style.display = 'none';
         setTimeout(() => {
-          if (left && !sensed) fallback.style.display = 'inline-block';
+          if (endAt && !sensed) fallback.style.display = 'inline-block';
         }, 3000);
       }
-      left = msLeft;
-      overdue = 0;
+      endAt = performance.now() + msLeft;
+      nudged = false;
       key = k;
       runIds = ids;
       for (const n of numbers.splice(0)) n.remove();
@@ -226,7 +228,7 @@ export function runTogether(send: (m: ClientMsg) => void, headOf: (id: string) =
     },
 
     onEnd(together: boolean) {
-      left = 0;
+      endAt = 0;
       key = '';
       runIds = [];
       for (const n of numbers.splice(0)) n.remove();
@@ -268,13 +270,13 @@ export function runTogether(send: (m: ClientMsg) => void, headOf: (id: string) =
         if (at) n.style.transform = `translate(${at.x - 12}px,${at.y - 34}px)`;
         n.style.left = n.style.top = '0';
       });
-      if (!left) return;
-      left = Math.max(0, left - dt * 1000);
+      if (!endAt) return;
+      const left = Math.max(0, endAt - performance.now());
       const s = Math.ceil(left / 1000);
       clock.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
       // The room ends the run on its own; if that's late, any message makes it finish.
-      if (!left && (overdue += dt * 1000) > OVERDUE_MS) {
-        overdue = -60_000;
+      if (!nudged && performance.now() - endAt > OVERDUE_MS) {
+        nudged = true;
         send({ t: 'motion', m: moving });
       }
     },
