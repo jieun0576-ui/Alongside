@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import {
-  AWAY_MS, BOAT_EVERY_MS, BOAT_LIFE_S, MAX_BOATS, MAX_PEOPLE, MAX_PER_ADDRESS, MAX_RUNNERS, RUN_PACE,
+  AWAY_MS, BOAT_EVERY_MS, BOAT_LIFE_S, MAX_BOATS, MAX_PEOPLE, MAX_RUNNERS, RUN_PACE,
   STONE_EVERY_MS, STONE_REACH,
   cooled, isId, parseClient, spend, trailSpot, type Budget, type Person, type Runner, type ServerMsg, type Thumb,
 } from '../src/protocol';
@@ -8,7 +8,6 @@ import {
 // What the room remembers about each socket. The address never leaves the server.
 type Seat = {
   p: Person;
-  ip: string;
   lastBoat?: number;
   lastStone?: number;
   thumb?: { host: string; at: number }; // Run Together: thumb raised (host === own id) or joined to a host
@@ -71,9 +70,6 @@ export class Room extends DurableObject<Env> {
   async fetch(req: Request) {
     const seats = this.ctx.getWebSockets().map((ws) => ws.deserializeAttachment() as Seat);
     if (seats.length >= MAX_PEOPLE) return turnAway();
-    // Set by Cloudflare's edge, so a phone can't fake it. One script can't fill the room.
-    const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown';
-    if (seats.filter((s) => s.ip === ip).length >= MAX_PER_ADDRESS) return turnAway();
     const { 0: client, 1: server } = new WebSocketPair();
     const now = Date.now();
     // Back after a lost connection, mid-run? The key (only ever sent to that runner) gives back your place.
@@ -91,7 +87,7 @@ export class Room extends DurableObject<Env> {
     const thumbs: Thumb[] = seats.filter((s) => s.thumb).map((s) => ({ id: s.p.id, host: s.thumb!.host }));
     const boats = (await this.liveBoats()).map((b) => ({ x: b.x, c: b.c, age: (now - b.born) / 1000 }));
     this.ctx.acceptWebSocket(server);
-    const seat: Seat = { p: me, ip, ...(back ? { run: back.run } : {}) };
+    const seat: Seat = { p: me, ...(back ? { run: back.run } : {}) };
     server.serializeAttachment(seat);
     server.send(JSON.stringify({ t: 'welcome', id: me.id, others, boats, runners, thumbs } satisfies ServerMsg));
     this.broadcast(server, { t: 'join', ...me });
