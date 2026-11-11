@@ -6,7 +6,10 @@ import { buildWorld, clampToWalk } from './world';
 import { connect } from './net';
 import { lakeLife } from './lake';
 import { stoneAim } from './aim';
-import { BOAT_COLOURS, BOAT_EVERY_MS, STONE_EVERY_MS, STONE_REACH, inLake, type Pose } from './protocol';
+import { runTogether } from './run';
+import {
+  BOAT_COLOURS, BOAT_EVERY_MS, RUN_PACE, STONE_EVERY_MS, STONE_REACH, inLake, trailSpot, type Pose, type Runner,
+} from './protocol';
 
 const renderer = new WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // cap for phone GPUs
@@ -21,7 +24,8 @@ const camera = new PerspectiveCamera(55, 1, 0.1, 300);
 const STAND_Y = 0.7;
 const WALK_SPEED = 1.6; // metres per second, an easy stroll
 const body = new CapsuleGeometry(0.25, 0.9, 4, 12);
-type Walker = { mesh: Mesh; goal: Pose; arrived: boolean };
+// run: set while this person is in a run; `at` is when we heard (performance.now() ms).
+type Walker = { mesh: Mesh; goal: Pose; arrived: boolean; run?: Runner & { at: number } };
 
 function sit(w: Walker, seated: boolean) {
   w.mesh.scale.y = seated ? 0.7 : 1;
@@ -32,7 +36,7 @@ function addWalker(color: string, at: Pose): Walker {
   const mesh = new Mesh(body, new MeshLambertMaterial({ color }));
   mesh.position.set(at.x, STAND_Y, at.z);
   scene.add(mesh);
-  const w = { mesh, goal: at, arrived: true };
+  const w: Walker = { mesh, goal: at, arrived: true };
   sit(w, at.s === 1);
   return w;
 }
@@ -44,6 +48,7 @@ function setGoal(w: Walker, goal: Pose) {
 }
 
 function step(w: Walker, dt: number) {
+  if (w.run) return runStep(w, w.run, dt);
   if (w.arrived) return;
   const p = w.mesh.position;
   const dx = w.goal.x - p.x;
@@ -59,6 +64,34 @@ function step(w: Walker, dt: number) {
     p.x += (dx / dist) * stride;
     p.z += (dz / dist) * stride;
   }
+}
+
+// Runners glide to their spot on the trail; it moves on at a steady pace while their phone says moving.
+function runStep(w: Walker, r: Runner & { at: number }, dt: number) {
+  const d = r.d + (r.m ? (RUN_PACE * (performance.now() - r.at)) / 1000 : 0);
+  const spot = trailSpot(d, r.l);
+  const p = w.mesh.position;
+  const k = Math.min(1, dt * 4);
+  p.x += (spot.x - p.x) * k;
+  p.z += (spot.z - p.z) * k;
+  p.y = STAND_Y + (r.m ? Math.abs(Math.sin(d * 2.4)) * 0.08 : 0); // a little bounce in each stride
+}
+
+function setRunner(r: Runner) {
+  const w = r.id === myId ? me : others.get(r.id);
+  if (!w) return;
+  sit(w, false);
+  w.run = { ...r, at: performance.now() };
+}
+
+let myId = '';
+let runIds: string[] = [];
+let allMoving = false;
+// Everyone in your run moving at once: a soft chime, then quiet until it happens again.
+function checkTogether() {
+  const all = runIds.length > 1 && runIds.every((id) => (id === myId ? me : others.get(id))?.run?.m === 1);
+  if (all && !allMoving) run.feel();
+  allMoving = all;
 }
 
 const me = addWalker('#f6f1ea', { x: Math.round(Math.random() * 800 - 400) / 100, z: 1, s: 0 }); // spread arrivals out
@@ -77,6 +110,9 @@ const send = connect(
     if (m.t === 'welcome') {
       for (const id of [...others.keys()]) removeOther(id); // fresh list after a reconnect
       for (const o of m.others) others.set(o.id, addWalker('#e3d3c0', o));
+      myId = m.id;
+      if (run.running) endMyRun(); // a new connection is a new person to the room
+      m.runners.forEach(setRunner);
       if (!boatsLoaded) m.boats.forEach(life.addBoat); // boats already afloat when you arrive
       boatsLoaded = true;
     } else if (m.t === 'join') {
@@ -87,6 +123,24 @@ const send = connect(
       if (w) setGoal(w, { x: m.x, z: m.z, s: m.s });
     } else if (m.t === 'leave') {
       removeOther(m.id);
+    } else if (m.t === 'invite') {
+      run.onInvite(m.id, m.d);
+    } else if (m.t === 'runner') {
+      setRunner(m.r);
+      checkTogether();
+    } else if (m.t === 'run') {
+      runIds = m.ids;
+      run.onRun(m.left);
+      checkTogether();
+    } else if (m.t === 'runEnd') {
+      const w = m.id === myId ? me : others.get(m.id);
+      if (w) {
+        w.run = undefined;
+        w.mesh.position.y = STAND_Y;
+        w.goal = { x: m.x, z: m.z, s: 0 };
+        w.arrived = false;
+      }
+      if (m.id === myId) endMyRun();
     } else if (m.t === 'boat') {
       life.addBoat(m.b);
     } else if (m.t === 'ripple') {
@@ -98,6 +152,12 @@ const send = connect(
   () => send({ t: 'move', ...me.goal }), // tell the room where you are as soon as you connect
 );
 let boatsLoaded = false;
+const run = runTogether(send);
+function endMyRun() {
+  runIds = [];
+  allMoving = false;
+  run.onEnd();
+}
 
 // A small ring where you tapped, fading out over a second.
 const tapRing = new RingGeometry(0.18, 0.26, 32);
@@ -114,10 +174,11 @@ let lastThrow = -Infinity;
 const hand = () => me.mesh.position.clone().setY(1.2);
 const head = new Vector3();
 let swipeFromHead = false;
-function headOnScreen() {
-  head.copy(me.mesh.position).setY(1.4).project(camera);
+function onScreen(at: Vector3, y: number) {
+  head.copy(at).setY(y).project(camera);
   return { x: ((head.x + 1) / 2) * innerWidth, y: ((1 - head.y) / 2) * innerHeight };
 }
+const headOnScreen = () => onScreen(me.mesh.position, 1.4);
 
 // Tap (not drag) picks where to go.
 const raycaster = new Raycaster();
@@ -134,6 +195,14 @@ renderer.domElement.addEventListener('pointerup', (e) => {
     new Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1),
     camera,
   );
+  // Run Together: tap near someone who isn't already running to invite them (a finger is wider than a capsule).
+  const person = aiming ? undefined : [...others].find(([, w]) => {
+    if (w.run) return false;
+    const s = onScreen(w.mesh.position, 1);
+    return Math.hypot(e.clientX - s.x, e.clientY - s.y) < 44;
+  });
+  if (person) return run.offerInvite(person[0]);
+  if (run.running) return; // while running, your phone's motion moves you, not taps
   const hit = raycaster.intersectObjects([...benches, ...ground, lake], true)[0];
   if (!hit) return;
   if (aiming) {
@@ -236,6 +305,7 @@ function update(dt: number) {
   step(me, dt);
   life.update(dt);
   stones.update(dt);
+  run.update(dt);
   showTools();
   if (aiming) {
     const h = headOnScreen();

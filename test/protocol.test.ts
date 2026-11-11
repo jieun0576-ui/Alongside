@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cooled, parseClient, spend, type Budget } from '../src/protocol.ts';
+import { cooled, parseClient, spend, trailSpot, type Budget } from '../src/protocol.ts';
 
 test('accepts a normal move and rounds it', () => {
   assert.deepEqual(parseClient('{"t":"move","x":1.23456,"z":-2,"s":1}'), { t: 'move', x: 1.23, z: -2, s: 1 });
@@ -56,4 +56,26 @@ test('boats and stones wait for their cool-down', () => {
   assert.equal(cooled(undefined, 0, 10_000), true); // first one is always fine
   assert.equal(cooled(1_000, 10_999, 10_000), false);
   assert.equal(cooled(1_000, 11_000, 10_000), true);
+});
+
+test('run messages: only real ids, set durations and on/off motion', () => {
+  const id = '123e4567-e89b-12d3-a456-426614174000';
+  assert.deepEqual(parseClient(`{"t":"invite","id":"${id}","d":10}`), { t: 'invite', id, d: 10 });
+  assert.deepEqual(parseClient(`{"t":"accept","id":"${id}"}`), { t: 'accept', id });
+  assert.deepEqual(parseClient('{"t":"motion","m":1}'), { t: 'motion', m: 1 });
+  assert.deepEqual(parseClient('{"t":"quit","x":1}'), { t: 'quit' });
+  for (const bad of [
+    `{"t":"invite","id":"${id}","d":7}`, // not 5, 10 or 20
+    '{"t":"invite","id":"<b>hi</b>","d":5}', // not an id
+    '{"t":"accept","id":5}',
+    '{"t":"motion","m":2}',
+  ]) assert.equal(parseClient(bad), null, bad);
+});
+
+test('the trail goes back and forth inside the walkable strip', () => {
+  assert.deepEqual(trailSpot(0, 0).x, -28);
+  assert.equal(trailSpot(56, 0).x, 28);
+  assert.equal(trailSpot(60, 0).x, 24);
+  assert.equal(trailSpot(112, 0).x, -28);
+  for (let l = 0; l < 4; l++) assert.ok(trailSpot(0, l).z > 2 && trailSpot(0, l).z < 5);
 });

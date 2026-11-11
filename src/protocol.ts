@@ -18,6 +18,12 @@ export const BOAT_EVERY_MS = 10_000; // one boat per person per 10 s
 export const STONE_EVERY_MS = 1_000;
 export const BOAT_LIFE_S = 30 * 60; // boats float away after 30 minutes
 export const MAX_BOATS = 50; // oldest drops off first
+// Run Together
+export const RUN_MINUTES = [5, 10, 20];
+export const MAX_RUNNERS = 4;
+export const RUN_PACE = 2.5; // metres per second while your phone says you're moving: an easy jog
+export const INVITE_EVERY_MS = 5_000;
+export const INVITE_LIFE_MS = 60_000;
 
 // Floating Thoughts: a boat is only ever one of these colours, never free text.
 export const BOAT_COLOURS = ['#f2c6c2', '#f6dfa4', '#bfe0c5', '#b9d4ee', '#d8c8ec', '#fbfaf6'];
@@ -27,15 +33,29 @@ export type Pose = { x: number; z: number; s: 0 | 1 };
 export type Person = Pose & { id: string };
 export type Boat = { x: number; c: number; age: number }; // age in seconds when sent
 
-export type ClientMsg = ({ t: 'move' } & Pose) | { t: 'boat'; c: number } | { t: 'stone'; x: number; z: number };
+// Where someone is in a run: d = metres along the trail when sent, m = 1 while moving, l = lane 0-3.
+export type Runner = { id: string; d: number; m: 0 | 1; l: number };
+
+export type ClientMsg =
+  | ({ t: 'move' } & Pose)
+  | { t: 'boat'; c: number }
+  | { t: 'stone'; x: number; z: number }
+  | { t: 'invite'; id: string; d: number } // ask someone to run for d minutes
+  | { t: 'accept'; id: string } // say yes to that person's invitation
+  | { t: 'motion'; m: 0 | 1 } // my phone says I'm moving (1) or resting (0)
+  | { t: 'quit' }; // leave my run early
 
 export type ServerMsg =
-  | { t: 'welcome'; id: string; others: Person[]; boats: Boat[] }
+  | { t: 'welcome'; id: string; others: Person[]; boats: Boat[]; runners: Runner[] }
   | ({ t: 'join' } & Person)
   | ({ t: 'move' } & Person)
   | { t: 'leave'; id: string }
   | { t: 'boat'; b: Boat }
   | { t: 'ripple'; id: string; x: number; z: number } // id: who threw it, so phones can draw the stone's flight
+  | { t: 'invite'; id: string; d: number } // someone asks you to run for d minutes
+  | { t: 'runner'; r: Runner } // someone started, moved or paused in a run (sent to everyone)
+  | { t: 'run'; ids: string[]; left: number } // to the runners only: who is in your run, ms left
+  | { t: 'runEnd'; id: string; x: number; z: number } // a run ended for this person; they stand here
   | { t: 'full' }; // sent just before the server closes a socket it has no room for
 
 export function inWalk(x: number, z: number) {
@@ -48,6 +68,15 @@ export function inLake(x: number, z: number) {
 
 const num = (v: unknown): v is number => typeof v === 'number';
 const cm = (v: number) => Math.round(v * 100) / 100;
+// Ids are the server's own random UUIDs.
+const isId = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f-]{36}$/.test(v);
+
+// The trail is walked back and forth: metres run -> x along the shore. Lanes sit side by side.
+export function trailSpot(d: number, lane: number) {
+  const len = WALK.maxX - WALK.minX;
+  const t = d % (2 * len);
+  return { x: t < len ? WALK.minX + t : WALK.maxX - (t - len), z: TRAIL.minZ + 0.6 + lane * 0.6 };
+}
 
 // The only messages a phone may send. Anything else, or any extra field, is dropped.
 export function parseClient(raw: unknown): ClientMsg | null {
@@ -59,13 +88,18 @@ export function parseClient(raw: unknown): ClientMsg | null {
     return null;
   }
   if (typeof m !== 'object' || m === null) return null;
-  const { t, x, z, s, c } = m as Record<string, unknown>;
+  const { t, x, z, s, c, id, d } = m as Record<string, unknown>;
   // Each branch rebuilds the object so no extra fields ride along to other phones.
   if (t === 'move' && num(x) && num(z) && inWalk(x, z) && (s === 0 || s === 1)) return { t, x: cm(x), z: cm(z), s };
   if (t === 'boat' && Number.isInteger(c) && (c as number) >= 0 && (c as number) < BOAT_COLOURS.length) {
     return { t, c: c as number };
   }
   if (t === 'stone' && num(x) && num(z) && inLake(x, z)) return { t, x: cm(x), z: cm(z) };
+  if (t === 'invite' && isId(id) && RUN_MINUTES.includes(d as number)) return { t, id, d: d as number };
+  if (t === 'accept' && isId(id)) return { t, id };
+  if (t === 'motion' && (m as Record<string, unknown>).m === 0) return { t, m: 0 };
+  if (t === 'motion' && (m as Record<string, unknown>).m === 1) return { t, m: 1 };
+  if (t === 'quit') return { t };
   return null;
 }
 
