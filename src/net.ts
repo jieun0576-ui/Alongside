@@ -1,4 +1,4 @@
-import type { Pose, ServerMsg } from './protocol';
+import type { ClientMsg, ServerMsg } from './protocol';
 
 // One live connection to the waterfront room. If it drops or the room is full, it shows a quiet
 // note and tries again, waiting longer each time: 3 s, 6 s, 12 s ... up to 1 min.
@@ -34,7 +34,7 @@ export function connect(onMessage: (m: ServerMsg) => void, onOpen: () => void) {
     };
   };
   open();
-  return (pose: Pose) => {
-    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ t: 'move', ...pose }));
+  return (msg: ClientMsg) => {
+    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
   };
 }

@@ -59,5 +59,5 @@ export function buildWorld() {
   [[-50, 6, 10], [-38, 10, 8], [-24, 4, 12], [-8, 14, 7], [6, 8, 10], [20, 18, 6], [34, 7, 12], [48, 11, 9]]
     .forEach(([x, h, w]) => scene.add(box(w, h, 6, '#b7a3a8', x, h / 2 - 0.3, -80)));
 
-  return { scene, boardwalk, benches };
+  return { scene, boardwalk, benches, lake };
 }
