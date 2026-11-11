@@ -11,9 +11,8 @@ export const WALK = { minX: -28, maxX: 28, minZ: BOARDWALK.minZ + 0.5, maxZ: GRA
 // Where stones can land: the lake in front of the boardwalk.
 export const LAKE = { minX: -40, maxX: 40, minZ: -30, maxZ: -3 };
 export const STONE_REACH = 20; // metres from where you stand
-export const MAX_PEOPLE = 30; // per waterfront
+export const MAX_PEOPLE = 30; // per waterfront, from any mix of Wi-Fi and mobile data (no per-address limit)
 export const MAX_MSGS_PER_SEC = 10;
-export const MAX_PER_ADDRESS = 4; // a family or a cafe on one Wi-Fi can still come together
 export const BOAT_EVERY_MS = 10_000; // one boat per person per 10 s
 export const STONE_EVERY_MS = 1_000;
 export const BOAT_LIFE_S = 30 * 60; // boats float away after 30 minutes
