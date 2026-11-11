@@ -207,7 +207,7 @@ function headOf(id: string) {
 
 // Finishing together: fireworks over the water.
 const show = fireworks(scene);
-// People out of view: small arrows on the screen edge point their way.
+// Your running partners out of view: small arrows on the screen edge point their way.
 const edges = edgeMarkers();
 
 // A small ring where you tapped, fading out over a second.
@@ -354,7 +354,7 @@ function update(dt: number) {
   stones.update(dt);
   run.update(dt);
   show.update(dt);
-  edges.update(others, camera);
+  edges.update(new Map([...others].filter(([id]) => runIds.includes(id))), camera); // only the people in your run
   showTools();
   if (aiming) {
     const h = headOnScreen();
