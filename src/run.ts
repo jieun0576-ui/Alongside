@@ -28,7 +28,7 @@ function button(text: string, onclick: () => void) {
 const text = (t: string) => Object.assign(document.createElement('span'), { textContent: t });
 
 export function runTogether(send: (m: ClientMsg) => void, headOf: (id: string) => Screen, myId: () => string) {
-  const raise = button('Raise a thumb', () => {
+  const raise = button('Up for a run?', () => {
     unlock();
     send({ t: 'raise' });
   });

@@ -1,5 +1,5 @@
 import {
-  CapsuleGeometry, Color, Fog, Group, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera,
+  CapsuleGeometry, Group, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera,
   Raycaster, RingGeometry, Vector2, Vector3, WebGLRenderer,
 } from 'three';
 import { buildWorld, clampToWalk } from './world';
@@ -7,6 +7,8 @@ import { connect } from './net';
 import { lakeLife } from './lake';
 import { stoneAim } from './aim';
 import { runTogether } from './run';
+import { fireworks } from './fireworks';
+import { edgeMarkers } from './edges';
 import {
   BOAT_COLOURS, BOAT_EVERY_MS, RUN_PACE, STONE_EVERY_MS, STONE_REACH, inLake, trailSpot, type Pose, type Runner,
 } from './protocol';
@@ -192,7 +194,7 @@ function endMyRun(together: boolean) {
   allMoving = false;
   saveKey('');
   run.onEnd(together);
-  if (together) glow = 1;
+  if (together) show.start(me.mesh.position.x);
 }
 
 // Where someone's head is on screen (for thumbs and runner numbers), or null when they're not in view.
@@ -203,16 +205,10 @@ function headOf(id: string) {
   return head.z < 1 ? s : null;
 }
 
-// Finishing together: the sky warms for a few seconds. shortcut: a tint only; the real sunset is step 6.
-const sky = new Color('#f3d9c4');
-const dusk = new Color('#f0a57c');
-let glow = 0;
-function warmSky(dt: number) {
-  if (glow <= 0) return;
-  glow = Math.max(0, glow - dt / 8);
-  const c = (scene.background as Color).copy(sky).lerp(dusk, Math.sin(Math.PI * glow));
-  (scene.fog as Fog).color.copy(c);
-}
+// Finishing together: fireworks over the water.
+const show = fireworks(scene);
+// People out of view: small arrows on the screen edge point their way.
+const edges = edgeMarkers();
 
 // A small ring where you tapped, fading out over a second.
 const tapRing = new RingGeometry(0.18, 0.26, 32);
@@ -306,15 +302,16 @@ arrow.firstElementChild!.animate(
   { duration: 1400, iterations: Infinity, easing: 'ease-out' },
 );
 
-stoneButton.onclick = () => {
-  aiming = !aiming;
+stoneButton.onclick = () => setAiming(!aiming);
+function setAiming(on: boolean) {
+  aiming = on;
   stoneButton.textContent = aiming ? 'Done' : 'Throw a stone';
   boatButton.style.display = aiming ? 'none' : '';
   arrow.style.display = aiming ? 'block' : 'none';
   palette.style.display = 'none';
   if (aiming) stones.aim(hand(), me.mesh.position.x, -8); // start straight out in front of you
   else stones.hide();
-};
+}
 
 // Floating Thoughts: pick a colour and let a paper boat go. No words, only colour.
 const palette = document.createElement('div');
@@ -341,7 +338,9 @@ document.body.append(palette, tools, arrow);
 
 let nearWater = false;
 function showTools() {
-  const near = aiming || (me.arrived && me.mesh.position.z <= NEAR_WATER_Z);
+  // No boats or stones during a run; a run that starts mid-aim puts the stone away.
+  if (run.running && aiming) setAiming(false);
+  const near = !run.running && (aiming || (me.arrived && me.mesh.position.z <= NEAR_WATER_Z));
   if (near === nearWater) return;
   nearWater = near;
   tools.style.display = near ? 'flex' : 'none';
@@ -354,7 +353,8 @@ function update(dt: number) {
   life.update(dt);
   stones.update(dt);
   run.update(dt);
-  warmSky(dt);
+  show.update(dt);
+  edges.update(others, camera);
   showTools();
   if (aiming) {
     const h = headOnScreen();

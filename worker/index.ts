@@ -119,6 +119,7 @@ export class Room extends DurableObject<Env> {
       ws.serializeAttachment(seat);
       this.broadcast(ws, { t: 'move', ...seat.p });
     } else if (m.t === 'boat') {
+      if (seat.run) return; // no boats or stones while running
       // Floating Thoughts: the server sets where the boat starts (in front of you), not the phone.
       if (!cooled(seat.lastBoat, now, BOAT_EVERY_MS)) return;
       seat.lastBoat = now;
@@ -170,7 +171,8 @@ export class Room extends DurableObject<Env> {
       // Leaving early is always allowed; the others keep running.
       if (seat.run) this.endRun(ws, seat, now, trailSpot(runner(seat.p, seat.run, now).d, seat.run.l), 0);
     } else {
-      // Ripple Effect: only within throwing reach of where you are.
+      // Ripple Effect: only within throwing reach of where you are, and not while running.
+      if (seat.run) return;
       if (!cooled(seat.lastStone, now, STONE_EVERY_MS)) return;
       if (Math.hypot(m.x - seat.p.x, m.z - seat.p.z) > STONE_REACH) return;
       seat.lastStone = now;
