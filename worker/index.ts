@@ -97,7 +97,7 @@ export class Room extends DurableObject<Env> {
       if (Math.hypot(m.x - seat.p.x, m.z - seat.p.z) > STONE_REACH) return;
       seat.lastStone = now;
       ws.serializeAttachment(seat);
-      this.broadcast(ws, { t: 'ripple', x: m.x, z: m.z }); // the thrower already drew their own
+      this.broadcast(ws, { t: 'ripple', id: seat.p.id, x: m.x, z: m.z }); // the thrower already drew their own
     }
   }
 

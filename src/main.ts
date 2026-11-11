@@ -90,7 +90,9 @@ const send = connect(
     } else if (m.t === 'boat') {
       life.addBoat(m.b);
     } else if (m.t === 'ripple') {
-      life.ripple(m.x, m.z);
+      const w = others.get(m.id);
+      if (w) stones.fly(w.mesh.position.clone().setY(1.2), m.x, m.z, () => life.ripple(m.x, m.z));
+      else life.ripple(m.x, m.z);
     }
   },
   () => send({ t: 'move', ...me.goal }), // tell the room where you are as soon as you connect
@@ -112,16 +114,18 @@ let lastThrow = -Infinity;
 const hand = () => me.mesh.position.clone().setY(1.2);
 const head = new Vector3();
 let swipeFromHead = false;
+function headOnScreen() {
+  head.copy(me.mesh.position).setY(1.4).project(camera);
+  return { x: ((head.x + 1) / 2) * innerWidth, y: ((1 - head.y) / 2) * innerHeight };
+}
 
 // Tap (not drag) picks where to go.
 const raycaster = new Raycaster();
 const down = new Vector2();
 renderer.domElement.addEventListener('pointerdown', (e) => {
   down.set(e.clientX, e.clientY);
-  head.copy(me.mesh.position).setY(1.4).project(camera);
-  const hx = ((head.x + 1) / 2) * innerWidth;
-  const hy = ((1 - head.y) / 2) * innerHeight;
-  swipeFromHead = aiming && Math.hypot(e.clientX - hx, e.clientY - hy) < 80;
+  const h = headOnScreen();
+  swipeFromHead = aiming && Math.hypot(e.clientX - h.x, e.clientY - h.y) < 80;
 });
 renderer.domElement.addEventListener('pointerup', (e) => {
   if (swipeFromHead && down.y - e.clientY > 40) return throwStone();
@@ -175,16 +179,21 @@ const button = (text: string) => {
 };
 const stoneButton = button('Throw a stone');
 const boatButton = button('Release a boat');
-const hint = document.createElement('p');
-hint.textContent = 'Tap the water to aim. Swipe up from your head to throw.';
-hint.style.cssText = 'position:fixed;left:16px;right:16px;top:16px;margin:0;display:none;text-align:center;' +
-  'font:15px system-ui,sans-serif;color:#4d3a2a;';
+// While aiming, a white arrow keeps rising from your head: swipe up here to throw.
+const arrow = document.createElement('div');
+arrow.innerHTML = '<svg width="28" height="44" viewBox="0 0 28 44" fill="none" stroke="#fff" stroke-width="4" ' +
+  'stroke-linecap="round" stroke-linejoin="round"><path d="M14 41V5M3 15 14 4l11 11"/></svg>';
+arrow.style.cssText = 'position:fixed;display:none;pointer-events:none;filter:drop-shadow(0 0 3px #0005);';
+arrow.firstElementChild!.animate(
+  [{ transform: 'translateY(10px)', opacity: 0 }, { opacity: 1, offset: 0.3 }, { transform: 'translateY(-40px)', opacity: 0 }],
+  { duration: 1400, iterations: Infinity, easing: 'ease-out' },
+);
 
 stoneButton.onclick = () => {
   aiming = !aiming;
   stoneButton.textContent = aiming ? 'Done' : 'Throw a stone';
   boatButton.style.display = aiming ? 'none' : '';
-  hint.style.display = aiming ? 'block' : 'none';
+  arrow.style.display = aiming ? 'block' : 'none';
   palette.style.display = 'none';
   if (aiming) stones.aim(hand(), me.mesh.position.x, -8); // start straight out in front of you
   else stones.hide();
@@ -211,7 +220,7 @@ for (const [i, colour] of BOAT_COLOURS.entries()) {
 }
 boatButton.onclick = () => (palette.style.display = palette.style.display === 'flex' ? 'none' : 'flex');
 tools.append(stoneButton, boatButton);
-document.body.append(palette, tools, hint);
+document.body.append(palette, tools, arrow);
 
 let nearWater = false;
 function showTools() {
@@ -228,6 +237,11 @@ function update(dt: number) {
   life.update(dt);
   stones.update(dt);
   showTools();
+  if (aiming) {
+    const h = headOnScreen();
+    arrow.style.left = `${h.x - 14}px`;
+    arrow.style.top = `${h.y - 44}px`;
+  }
   tapAge += dt;
   tapMark.visible = tapAge < 1;
   (tapMark.material as MeshBasicMaterial).opacity = 0.8 * (1 - tapAge);

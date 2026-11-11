@@ -30,7 +30,7 @@ export type ServerMsg =
   | ({ t: 'move' } & Person)
   | { t: 'leave'; id: string }
   | { t: 'boat'; b: Boat }
-  | { t: 'ripple'; x: number; z: number }
+  | { t: 'ripple'; id: string; x: number; z: number } // id: who threw it, so phones can draw the stone's flight
   | { t: 'full' }; // sent just before the server closes a socket it has no room for
 
 export function inWalk(x: number, z: number) {
