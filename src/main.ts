@@ -1,11 +1,12 @@
 import {
-  CapsuleGeometry, Group, Mesh, MeshLambertMaterial, Object3D, PerspectiveCamera,
-  Raycaster, Vector2, Vector3, WebGLRenderer,
+  CapsuleGeometry, Group, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera,
+  Raycaster, RingGeometry, Vector2, Vector3, WebGLRenderer,
 } from 'three';
 import { buildWorld, clampToWalk } from './world';
 import { connect } from './net';
 import { lakeLife } from './lake';
-import { BOAT_COLOURS, BOAT_EVERY_MS, STONE_REACH, inLake, type Pose } from './protocol';
+import { stoneAim } from './aim';
+import { BOAT_COLOURS, BOAT_EVERY_MS, STONE_EVERY_MS, STONE_REACH, inLake, type Pose } from './protocol';
 
 const renderer = new WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // cap for phone GPUs
@@ -13,6 +14,7 @@ document.body.appendChild(renderer.domElement);
 
 const { scene, boardwalk, benches, lake } = buildWorld();
 const life = lakeLife(scene);
+const stones = stoneAim(scene);
 const camera = new PerspectiveCamera(55, 1, 0.1, 300);
 
 // Everyone, you included, is a soft capsule walking toward a goal and maybe sitting there.
@@ -95,11 +97,34 @@ const send = connect(
 );
 let boatsLoaded = false;
 
+// A small ring where you tapped, fading out over a second.
+const tapRing = new RingGeometry(0.18, 0.26, 32);
+tapRing.rotateX(-Math.PI / 2);
+const tapMark = new Mesh(tapRing, new MeshBasicMaterial({ color: '#fbfaf6', transparent: true, depthWrite: false }));
+tapMark.visible = false;
+scene.add(tapMark);
+let tapAge = 1;
+
+// Ripple Effect: in aim mode you stay put, tap the water to aim, and swipe up from your head to throw.
+const NEAR_WATER_Z = -1.2; // the front of the boardwalk, benches included
+let aiming = false;
+let lastThrow = -Infinity;
+const hand = () => me.mesh.position.clone().setY(1.2);
+const head = new Vector3();
+let swipeFromHead = false;
+
 // Tap (not drag) picks where to go.
 const raycaster = new Raycaster();
 const down = new Vector2();
-renderer.domElement.addEventListener('pointerdown', (e) => down.set(e.clientX, e.clientY));
+renderer.domElement.addEventListener('pointerdown', (e) => {
+  down.set(e.clientX, e.clientY);
+  head.copy(me.mesh.position).setY(1.4).project(camera);
+  const hx = ((head.x + 1) / 2) * innerWidth;
+  const hy = ((1 - head.y) / 2) * innerHeight;
+  swipeFromHead = aiming && Math.hypot(e.clientX - hx, e.clientY - hy) < 80;
+});
 renderer.domElement.addEventListener('pointerup', (e) => {
+  if (swipeFromHead && down.y - e.clientY > 40) return throwStone();
   if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 10) return;
   raycaster.setFromCamera(
     new Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1),
@@ -107,28 +132,66 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   );
   const hit = raycaster.intersectObjects([...benches, boardwalk, lake], true)[0];
   if (!hit) return;
-  if (hit.object === lake) {
-    // Ripple Effect: tap the lake to throw a stone, if it's within reach.
-    const { x, z } = hit.point;
+  if (aiming) {
+    // You can't walk while aiming; only taps on the water count, within reach.
+    if (hit.object !== lake) return;
+    // A tap too far out aims at the farthest you can throw, in the same direction.
     const p = me.goal; // measured the same way as the server does: from where you're heading
-    if (!inLake(x, z) || Math.hypot(x - p.x, z - p.z) > STONE_REACH) return;
-    life.ripple(x, z);
-    send({ t: 'stone', x, z });
+    const d = Math.hypot(hit.point.x - p.x, hit.point.z - p.z);
+    const k = Math.min(1, (STONE_REACH - 0.5) / d);
+    const x = p.x + (hit.point.x - p.x) * k;
+    const z = p.z + (hit.point.z - p.z) * k;
+    if (inLake(x, z)) stones.aim(hand(), x, z);
     return;
   }
+  if (hit.object === lake) return;
   let obj: Object3D | null = hit.object;
   while (obj && !benches.includes(obj as Group)) obj = obj.parent;
   const p = obj ? obj.position : hit.point;
   setGoal(me, { ...clampToWalk(p.x, p.z), s: obj ? 1 : 0 });
   send({ t: 'move', ...me.goal });
+  tapMark.position.set(me.goal.x, 0.01, me.goal.z);
+  tapAge = 0;
 });
 
-// Floating Thoughts: pick a colour and let a paper boat go. No words, only colour.
-const boatButton = document.createElement('button');
-boatButton.textContent = 'Release a boat';
-const palette = document.createElement('div');
+function throwStone() {
+  const now = performance.now();
+  if (now - lastThrow < STONE_EVERY_MS) return; // same pace the server allows
+  lastThrow = now;
+  const { x, z } = stones.target;
+  send({ t: 'stone', x, z });
+  stones.throwStone(() => life.ripple(x, z));
+}
+
+// The buttons only appear once you're standing or sitting by the water.
+const tools = document.createElement('div');
+tools.style.cssText = 'position:fixed;right:16px;bottom:64px;display:none;gap:10px;';
 const pill = 'border:none;border-radius:999px;font:15px system-ui,sans-serif;';
-boatButton.style.cssText = `position:fixed;right:16px;bottom:64px;padding:10px 16px;background:#fbfaf6;color:#4d3a2a;${pill}`;
+const button = (text: string) => {
+  const b = document.createElement('button');
+  b.textContent = text;
+  b.style.cssText = `padding:10px 16px;background:#fbfaf6;color:#4d3a2a;${pill}`;
+  return b;
+};
+const stoneButton = button('Throw a stone');
+const boatButton = button('Release a boat');
+const hint = document.createElement('p');
+hint.textContent = 'Tap the water to aim. Swipe up from your head to throw.';
+hint.style.cssText = 'position:fixed;left:16px;right:16px;top:16px;margin:0;display:none;text-align:center;' +
+  'font:15px system-ui,sans-serif;color:#4d3a2a;';
+
+stoneButton.onclick = () => {
+  aiming = !aiming;
+  stoneButton.textContent = aiming ? 'Done' : 'Throw a stone';
+  boatButton.style.display = aiming ? 'none' : '';
+  hint.style.display = aiming ? 'block' : 'none';
+  palette.style.display = 'none';
+  if (aiming) stones.aim(hand(), me.mesh.position.x, -8); // start straight out in front of you
+  else stones.hide();
+};
+
+// Floating Thoughts: pick a colour and let a paper boat go. No words, only colour.
+const palette = document.createElement('div');
 palette.style.cssText = 'position:fixed;right:16px;bottom:116px;display:none;gap:10px;';
 for (const [i, colour] of BOAT_COLOURS.entries()) {
   const dot = document.createElement('button');
@@ -147,15 +210,32 @@ for (const [i, colour] of BOAT_COLOURS.entries()) {
   palette.appendChild(dot);
 }
 boatButton.onclick = () => (palette.style.display = palette.style.display === 'flex' ? 'none' : 'flex');
-document.body.append(palette, boatButton);
+tools.append(stoneButton, boatButton);
+document.body.append(palette, tools, hint);
+
+let nearWater = false;
+function showTools() {
+  const near = aiming || (me.arrived && me.mesh.position.z <= NEAR_WATER_Z);
+  if (near === nearWater) return;
+  nearWater = near;
+  tools.style.display = near ? 'flex' : 'none';
+  if (!near) palette.style.display = 'none';
+}
 
 const camGoal = new Vector3();
 function update(dt: number) {
   step(me, dt);
   life.update(dt);
+  stones.update(dt);
+  showTools();
+  tapAge += dt;
+  tapMark.visible = tapAge < 1;
+  (tapMark.material as MeshBasicMaterial).opacity = 0.8 * (1 - tapAge);
   for (const w of others.values()) step(w, dt);
   // Camera eases along behind you, looking out over the lake.
-  camGoal.set(me.mesh.position.x, 6, me.mesh.position.z + 10);
+  // While aiming it steps to the side, so the stone's arc can be seen.
+  if (aiming) camGoal.set(me.mesh.position.x + 6, 5, me.mesh.position.z + 7);
+  else camGoal.set(me.mesh.position.x, 6, me.mesh.position.z + 10);
   camera.position.lerp(camGoal, 1 - Math.exp(-3 * dt));
   camera.lookAt(me.mesh.position.x, 0, me.mesh.position.z - 5);
 }

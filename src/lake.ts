@@ -3,7 +3,7 @@ import {
 } from 'three';
 import { BOAT_COLOURS, BOAT_LIFE_S, MAX_BOATS, type Boat } from './protocol';
 
-const WATER_Y = -0.28;
+export const WATER_Y = -0.28;
 const DRIFT = 0.05; // metres per second out onto the lake: 90 m in 30 minutes, into the haze
 const hull = new BoxGeometry(0.5, 0.08, 0.22);
 const sail = new ConeGeometry(0.14, 0.3, 3);
