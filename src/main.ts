@@ -6,13 +6,18 @@ import { buildWorld, clampToWalk } from './world';
 import { connect } from './net';
 import { lakeLife } from './lake';
 import { stoneAim } from './aim';
-import { BOAT_COLOURS, BOAT_EVERY_MS, STONE_EVERY_MS, STONE_REACH, inLake, type Pose } from './protocol';
+import { runTogether } from './run';
+import { fireworks } from './fireworks';
+import { edgeMarkers } from './edges';
+import {
+  BOAT_COLOURS, BOAT_EVERY_MS, RUN_PACE, STONE_EVERY_MS, STONE_REACH, inLake, trailSpot, type Pose, type Runner,
+} from './protocol';
 
 const renderer = new WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // cap for phone GPUs
 document.body.appendChild(renderer.domElement);
 
-const { scene, boardwalk, benches, lake } = buildWorld();
+const { scene, ground, benches, lake } = buildWorld();
 const life = lakeLife(scene);
 const stones = stoneAim(scene);
 const camera = new PerspectiveCamera(55, 1, 0.1, 300);
@@ -21,7 +26,8 @@ const camera = new PerspectiveCamera(55, 1, 0.1, 300);
 const STAND_Y = 0.7;
 const WALK_SPEED = 1.6; // metres per second, an easy stroll
 const body = new CapsuleGeometry(0.25, 0.9, 4, 12);
-type Walker = { mesh: Mesh; goal: Pose; arrived: boolean };
+// run: set while this person is in a run; `at` is when we heard (performance.now() ms).
+type Walker = { mesh: Mesh; goal: Pose; arrived: boolean; run?: Runner & { at: number } };
 
 function sit(w: Walker, seated: boolean) {
   w.mesh.scale.y = seated ? 0.7 : 1;
@@ -32,7 +38,7 @@ function addWalker(color: string, at: Pose): Walker {
   const mesh = new Mesh(body, new MeshLambertMaterial({ color }));
   mesh.position.set(at.x, STAND_Y, at.z);
   scene.add(mesh);
-  const w = { mesh, goal: at, arrived: true };
+  const w: Walker = { mesh, goal: at, arrived: true };
   sit(w, at.s === 1);
   return w;
 }
@@ -44,6 +50,7 @@ function setGoal(w: Walker, goal: Pose) {
 }
 
 function step(w: Walker, dt: number) {
+  if (w.run) return runStep(w, w.run, dt);
   if (w.arrived) return;
   const p = w.mesh.position;
   const dx = w.goal.x - p.x;
@@ -59,6 +66,60 @@ function step(w: Walker, dt: number) {
     p.x += (dx / dist) * stride;
     p.z += (dz / dist) * stride;
   }
+}
+
+// Runners glide to their spot on the trail; it moves on at a steady pace while their phone says moving.
+function runStep(w: Walker, r: Runner & { at: number }, dt: number) {
+  const d = r.d + (r.m ? (RUN_PACE * (performance.now() - r.at)) / 1000 : 0);
+  const spot = trailSpot(d, r.l);
+  const p = w.mesh.position;
+  const k = Math.min(1, dt * 4);
+  p.x += (spot.x - p.x) * k;
+  p.z += (spot.z - p.z) * k;
+  p.y = STAND_Y + (r.m ? Math.abs(Math.sin(d * 2.4)) * 0.08 : 0); // a little bounce in each stride
+}
+
+function setRunner(r: Runner) {
+  const w = r.id === myId ? me : others.get(r.id);
+  if (!w) return;
+  sit(w, false);
+  if (!w.run) {
+    // Just started (or came back): carried straight to their place on the trail.
+    const spot = trailSpot(r.d, r.l);
+    w.mesh.position.set(spot.x, STAND_Y, spot.z);
+  }
+  w.run = { ...r, at: performance.now() };
+  // Lost connection: the avatar waits, faded, until they're back.
+  const mat = w.mesh.material as MeshLambertMaterial;
+  mat.transparent = !!r.a;
+  mat.opacity = r.a ? 0.35 : 1;
+}
+
+// The key that gives you back your place in a run after a lost connection or a reload.
+let runKey = '';
+try {
+  runKey = sessionStorage.getItem('runKey') ?? '';
+} catch {
+  // storage blocked: reconnecting still works, reloading the page doesn't
+}
+function saveKey(k: string) {
+  runKey = k;
+  try {
+    sessionStorage.setItem('runKey', k);
+  } catch {
+    // see above
+  }
+}
+
+let myId = '';
+let runIds: string[] = [];
+let allMoving = false;
+// Everyone in your run moving at once: a soft chime, then quiet until it happens again.
+function checkTogether() {
+  const ids = runIds.filter(Boolean);
+  const all = ids.length > 1 && ids.every((id) => (id === myId ? me : others.get(id))?.run?.m === 1);
+  if (all && !allMoving) run.feel();
+  allMoving = all;
 }
 
 const me = addWalker('#f6f1ea', { x: Math.round(Math.random() * 800 - 400) / 100, z: 1, s: 0 }); // spread arrivals out
@@ -77,6 +138,13 @@ const send = connect(
     if (m.t === 'welcome') {
       for (const id of [...others.keys()]) removeOther(id); // fresh list after a reconnect
       for (const o of m.others) others.set(o.id, addWalker('#e3d3c0', o));
+      if (m.id !== myId) {
+        if (run.running) endMyRun(false); // a new person to the room: that run is over for you
+        me.run = undefined;
+      }
+      myId = m.id;
+      m.runners.forEach(setRunner);
+      run.onWelcome(m.thumbs);
       if (!boatsLoaded) m.boats.forEach(life.addBoat); // boats already afloat when you arrive
       boatsLoaded = true;
     } else if (m.t === 'join') {
@@ -87,6 +155,27 @@ const send = connect(
       if (w) setGoal(w, { x: m.x, z: m.z, s: m.s });
     } else if (m.t === 'leave') {
       removeOther(m.id);
+    } else if (m.t === 'thumb') {
+      run.onThumb(m.id, m.host);
+    } else if (m.t === 'runner') {
+      setRunner(m.r);
+      checkTogether();
+    } else if (m.t === 'run') {
+      runIds = m.ids;
+      saveKey(m.k);
+      run.onRun(m.ids, m.left, m.k);
+      checkTogether();
+    } else if (m.t === 'runEnd') {
+      const w = m.id === myId ? me : others.get(m.id);
+      if (w) {
+        // Carried to where the run ended: their spot on the trail, or the shared spot by the water.
+        w.run = undefined;
+        w.mesh.position.set(m.x, STAND_Y, m.z);
+        w.goal = { x: m.x, z: m.z, s: 0 };
+        w.arrived = true;
+        (w.mesh.material as MeshLambertMaterial).opacity = 1;
+      }
+      if (m.id === myId) endMyRun(m.f === 1);
     } else if (m.t === 'boat') {
       life.addBoat(m.b);
     } else if (m.t === 'ripple') {
@@ -96,8 +185,30 @@ const send = connect(
     }
   },
   () => send({ t: 'move', ...me.goal }), // tell the room where you are as soon as you connect
+  () => runKey,
 );
 let boatsLoaded = false;
+const run = runTogether(send, headOf, () => myId);
+function endMyRun(together: boolean) {
+  runIds = [];
+  allMoving = false;
+  saveKey('');
+  run.onEnd(together);
+  if (together) show.start(me.mesh.position.x);
+}
+
+// Where someone's head is on screen (for thumbs and runner numbers), or null when they're not in view.
+function headOf(id: string) {
+  const w = id === myId ? me : others.get(id);
+  if (!w) return null;
+  const s = onScreen(w.mesh.position, 1.7);
+  return head.z < 1 ? s : null;
+}
+
+// Finishing together: fireworks over the water.
+const show = fireworks(scene);
+// Your running partners out of view: small arrows on the screen edge point their way.
+const edges = edgeMarkers();
 
 // A small ring where you tapped, fading out over a second.
 const tapRing = new RingGeometry(0.18, 0.26, 32);
@@ -114,10 +225,11 @@ let lastThrow = -Infinity;
 const hand = () => me.mesh.position.clone().setY(1.2);
 const head = new Vector3();
 let swipeFromHead = false;
-function headOnScreen() {
-  head.copy(me.mesh.position).setY(1.4).project(camera);
+function onScreen(at: Vector3, y: number) {
+  head.copy(at).setY(y).project(camera);
   return { x: ((head.x + 1) / 2) * innerWidth, y: ((1 - head.y) / 2) * innerHeight };
 }
+const headOnScreen = () => onScreen(me.mesh.position, 1.4);
 
 // Tap (not drag) picks where to go.
 const raycaster = new Raycaster();
@@ -134,7 +246,8 @@ renderer.domElement.addEventListener('pointerup', (e) => {
     new Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1),
     camera,
   );
-  const hit = raycaster.intersectObjects([...benches, boardwalk, lake], true)[0];
+  if (run.running) return; // while running, your phone's motion moves you, not taps
+  const hit = raycaster.intersectObjects([...benches, ...ground, lake], true)[0];
   if (!hit) return;
   if (aiming) {
     // You can't walk while aiming; only taps on the water count, within reach.
@@ -189,15 +302,16 @@ arrow.firstElementChild!.animate(
   { duration: 1400, iterations: Infinity, easing: 'ease-out' },
 );
 
-stoneButton.onclick = () => {
-  aiming = !aiming;
+stoneButton.onclick = () => setAiming(!aiming);
+function setAiming(on: boolean) {
+  aiming = on;
   stoneButton.textContent = aiming ? 'Done' : 'Throw a stone';
   boatButton.style.display = aiming ? 'none' : '';
   arrow.style.display = aiming ? 'block' : 'none';
   palette.style.display = 'none';
   if (aiming) stones.aim(hand(), me.mesh.position.x, -8); // start straight out in front of you
   else stones.hide();
-};
+}
 
 // Floating Thoughts: pick a colour and let a paper boat go. No words, only colour.
 const palette = document.createElement('div');
@@ -224,7 +338,9 @@ document.body.append(palette, tools, arrow);
 
 let nearWater = false;
 function showTools() {
-  const near = aiming || (me.arrived && me.mesh.position.z <= NEAR_WATER_Z);
+  // No boats or stones during a run; a run that starts mid-aim puts the stone away.
+  if (run.running && aiming) setAiming(false);
+  const near = !run.running && (aiming || (me.arrived && me.mesh.position.z <= NEAR_WATER_Z));
   if (near === nearWater) return;
   nearWater = near;
   tools.style.display = near ? 'flex' : 'none';
@@ -236,6 +352,13 @@ function update(dt: number) {
   step(me, dt);
   life.update(dt);
   stones.update(dt);
+  run.update(dt);
+  show.update(dt);
+  // Only the people in your run, each shown by their runner number.
+  edges.update(
+    runIds.flatMap((id, i) => (others.has(id) ? [{ id, at: others.get(id)!.mesh.position, label: String(i + 1) }] : [])),
+    camera,
+  );
   showTools();
   if (aiming) {
     const h = headOnScreen();
