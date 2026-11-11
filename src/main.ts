@@ -4,13 +4,15 @@ import {
 } from 'three';
 import { buildWorld, clampToWalk } from './world';
 import { connect } from './net';
-import type { Pose } from './protocol';
+import { lakeLife } from './lake';
+import { BOAT_COLOURS, BOAT_EVERY_MS, STONE_REACH, inLake, type Pose } from './protocol';
 
 const renderer = new WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // cap for phone GPUs
 document.body.appendChild(renderer.domElement);
 
-const { scene, boardwalk, benches } = buildWorld();
+const { scene, boardwalk, benches, lake } = buildWorld();
+const life = lakeLife(scene);
 const camera = new PerspectiveCamera(55, 1, 0.1, 300);
 
 // Everyone, you included, is a soft capsule walking toward a goal and maybe sitting there.
@@ -73,6 +75,8 @@ const send = connect(
     if (m.t === 'welcome') {
       for (const id of [...others.keys()]) removeOther(id); // fresh list after a reconnect
       for (const o of m.others) others.set(o.id, addWalker('#e3d3c0', o));
+      if (!boatsLoaded) m.boats.forEach(life.addBoat); // boats already afloat when you arrive
+      boatsLoaded = true;
     } else if (m.t === 'join') {
       removeOther(m.id);
       others.set(m.id, addWalker('#e3d3c0', m));
@@ -81,10 +85,15 @@ const send = connect(
       if (w) setGoal(w, { x: m.x, z: m.z, s: m.s });
     } else if (m.t === 'leave') {
       removeOther(m.id);
+    } else if (m.t === 'boat') {
+      life.addBoat(m.b);
+    } else if (m.t === 'ripple') {
+      life.ripple(m.x, m.z);
     }
   },
-  () => send(me.goal), // tell the room where you are as soon as you connect
+  () => send({ t: 'move', ...me.goal }), // tell the room where you are as soon as you connect
 );
+let boatsLoaded = false;
 
 // Tap (not drag) picks where to go.
 const raycaster = new Raycaster();
@@ -96,18 +105,54 @@ renderer.domElement.addEventListener('pointerup', (e) => {
     new Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1),
     camera,
   );
-  const hit = raycaster.intersectObjects([...benches, boardwalk], true)[0];
+  const hit = raycaster.intersectObjects([...benches, boardwalk, lake], true)[0];
   if (!hit) return;
+  if (hit.object === lake) {
+    // Ripple Effect: tap the lake to throw a stone, if it's within reach.
+    const { x, z } = hit.point;
+    const p = me.mesh.position;
+    if (!inLake(x, z) || Math.hypot(x - p.x, z - p.z) > STONE_REACH) return;
+    life.ripple(x, z);
+    send({ t: 'stone', x, z });
+    return;
+  }
   let obj: Object3D | null = hit.object;
   while (obj && !benches.includes(obj as Group)) obj = obj.parent;
   const p = obj ? obj.position : hit.point;
   setGoal(me, { ...clampToWalk(p.x, p.z), s: obj ? 1 : 0 });
-  send(me.goal);
+  send({ t: 'move', ...me.goal });
 });
+
+// Floating Thoughts: pick a colour and let a paper boat go. No words, only colour.
+const boatButton = document.createElement('button');
+boatButton.textContent = 'Release a boat';
+const palette = document.createElement('div');
+const pill = 'border:none;border-radius:999px;font:15px system-ui,sans-serif;';
+boatButton.style.cssText = `position:fixed;right:16px;bottom:64px;padding:10px 16px;background:#fbfaf6;color:#4d3a2a;${pill}`;
+palette.style.cssText = 'position:fixed;right:16px;bottom:116px;display:none;gap:10px;';
+for (const [i, colour] of BOAT_COLOURS.entries()) {
+  const dot = document.createElement('button');
+  dot.ariaLabel = `Boat colour ${i + 1}`;
+  dot.style.cssText = `width:36px;height:36px;padding:0;background:${colour};box-shadow:0 0 0 2px #fff8;${pill}`;
+  dot.onclick = () => {
+    send({ t: 'boat', c: i }); // the boat appears when the room sends it back to everyone
+    palette.style.display = 'none';
+    boatButton.disabled = true; // one boat per 10 s, same as the server allows
+    boatButton.style.opacity = '0.5';
+    setTimeout(() => {
+      boatButton.disabled = false;
+      boatButton.style.opacity = '1';
+    }, BOAT_EVERY_MS);
+  };
+  palette.appendChild(dot);
+}
+boatButton.onclick = () => (palette.style.display = palette.style.display === 'flex' ? 'none' : 'flex');
+document.body.append(palette, boatButton);
 
 const camGoal = new Vector3();
 function update(dt: number) {
   step(me, dt);
+  life.update(dt);
   for (const w of others.values()) step(w, dt);
   // Camera eases along behind you, looking out over the lake.
   camGoal.set(me.mesh.position.x, 6, me.mesh.position.z + 10);
