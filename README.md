@@ -8,11 +8,14 @@ A browser-based 3D social space where people rest and run together along a virtu
 
 ```
 npm install
-npm run dev     # open the "Network" URL on your phone (same Wi-Fi)
-npm run build   # static site in dist/
+npm run dev       # just the 3D scene, fast reload; open the "Network" URL on your phone
+npm run dev:full  # scene + room server (Cloudflare running locally) on port 8787
+npm test          # checks for what the server accepts from phones
+npm run build     # type check + static site in dist/
 ```
 
 ## Publish
 
-Cloudflare Pages (or Vercel) connected to this repo: build command `npm run build`,
-output folder `dist`. Every merge to `main` then goes live by itself.
+Cloudflare Workers, connected to this repo: build command `npm run build`, deploy
+`npx wrangler deploy`. `wrangler.jsonc` serves `dist/` and runs the room server in
+`worker/` (a Durable Object, one per waterfront). Every merge to `main` goes live by itself.
