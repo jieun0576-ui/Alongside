@@ -15,7 +15,8 @@ export type ServerMsg =
   | { t: 'welcome'; id: string; others: Person[] }
   | ({ t: 'join' } & Person)
   | ({ t: 'move' } & Person)
-  | { t: 'leave'; id: string };
+  | { t: 'leave'; id: string }
+  | { t: 'full' }; // sent just before the server closes a socket it has no room for
 
 export function inWalk(x: number, z: number) {
   return x >= WALK.minX && x <= WALK.maxX && z >= WALK.minZ && z <= WALK.maxZ;

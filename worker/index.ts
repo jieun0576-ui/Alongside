@@ -24,18 +24,26 @@ export default {
   },
 };
 
+// Say "full" over the socket so the phone can tell the visitor, then close it.
+// (A plain HTTP error would look the same to the browser as being offline.)
+function turnAway() {
+  const { 0: client, 1: server } = new WebSocketPair();
+  server.accept();
+  server.send(JSON.stringify({ t: 'full' } satisfies ServerMsg));
+  server.close(4000, 'full');
+  return new Response(null, { status: 101, webSocket: client });
+}
+
 // One waterfront. Uses Cloudflare's hibernating websockets, so an idle room costs nothing.
 export class Room extends DurableObject<Env> {
   private budget = new Map<WebSocket, Budget>();
 
   async fetch(req: Request) {
     const seats = this.ctx.getWebSockets().map((ws) => ws.deserializeAttachment() as Seat);
-    if (seats.length >= MAX_PEOPLE) return new Response('Waterfront is full', { status: 503 });
+    if (seats.length >= MAX_PEOPLE) return turnAway();
     // Set by Cloudflare's edge, so a phone can't fake it. One script can't fill the room.
     const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown';
-    if (seats.filter((s) => s.ip === ip).length >= MAX_PER_ADDRESS) {
-      return new Response('Too many from one address', { status: 429 });
-    }
+    if (seats.filter((s) => s.ip === ip).length >= MAX_PER_ADDRESS) return turnAway();
     const { 0: client, 1: server } = new WebSocketPair();
     // The server picks your id, so nobody can speak for someone else.
     const me: Person = { id: crypto.randomUUID(), x: 3, z: 1, s: 0 };
