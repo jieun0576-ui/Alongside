@@ -1,7 +1,7 @@
 import {
   BoxGeometry, ConeGeometry, Group, Mesh, MeshBasicMaterial, MeshLambertMaterial, RingGeometry, Scene,
 } from 'three';
-import { BOAT_COLOURS, BOAT_LIFE_S, type Boat } from './protocol';
+import { BOAT_COLOURS, BOAT_LIFE_S, MAX_BOATS, type Boat } from './protocol';
 
 const WATER_Y = -0.28;
 const DRIFT = 0.05; // metres per second out onto the lake: 90 m in 30 minutes, into the haze
@@ -16,7 +16,16 @@ export function lakeLife(scene: Scene) {
   const rings: { m: Mesh; start: number }[] = [];
   let now = 0; // seconds, advanced by update()
 
+  function dropBoat(i: number) {
+    const b = boats[i];
+    scene.remove(b.g);
+    (b.g.children[0] as Mesh<BoxGeometry, MeshLambertMaterial>).material.dispose();
+    boats.splice(i, 1);
+  }
+
+  // Same limit as the server, so every phone shows the same newest 50 boats.
   function addBoat(b: Boat) {
+    if (boats.length >= MAX_BOATS) dropBoat(0); // boats arrive oldest first
     const mat = new MeshLambertMaterial({ color: BOAT_COLOURS[b.c] });
     const g = new Group();
     g.add(new Mesh(hull, mat));
@@ -44,9 +53,7 @@ export function lakeLife(scene: Scene) {
       const b = boats[i];
       const age = now - b.born;
       if (age > BOAT_LIFE_S) {
-        scene.remove(b.g);
-        (b.g.children[0] as Mesh<BoxGeometry, MeshLambertMaterial>).material.dispose();
-        boats.splice(i, 1);
+        dropBoat(i);
         continue;
       }
       b.g.position.set(b.x + Math.sin(age / 7 + b.x) * 0.6, WATER_Y + Math.sin(age * 1.3) * 0.02, -3.5 - age * DRIFT);

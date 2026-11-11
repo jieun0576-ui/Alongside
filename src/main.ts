@@ -110,7 +110,7 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   if (hit.object === lake) {
     // Ripple Effect: tap the lake to throw a stone, if it's within reach.
     const { x, z } = hit.point;
-    const p = me.mesh.position;
+    const p = me.goal; // measured the same way as the server does: from where you're heading
     if (!inLake(x, z) || Math.hypot(x - p.x, z - p.z) > STONE_REACH) return;
     life.ripple(x, z);
     send({ t: 'stone', x, z });
