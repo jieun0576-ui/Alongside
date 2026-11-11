@@ -1,11 +1,12 @@
-import { AdditiveBlending, BufferAttribute, BufferGeometry, Points, PointsMaterial, Scene } from 'three';
-import { BOAT_COLOURS } from './protocol';
+import { BufferAttribute, BufferGeometry, Points, PointsMaterial, Scene } from 'three';
 
 const SPARKS = 80;
 const LIFE_S = 2.2;
 const GRAVITY = 3;
+// Warm, clear colours that stand out against the pale evening sky.
+const COLOURS = ['#ff7a59', '#ffc93c', '#5fd38d', '#4fa3ff', '#c77dff', '#ff5d8f'];
 
-// Finishing a run together: soft bursts of light over the water, in the paper-boat colours.
+// Finishing a run together: bursts of light over the water.
 export function fireworks(scene: Scene) {
   const bursts: { p: Points; v: Float32Array; age: number }[] = [];
   const queue: { at: number; x: number }[] = [];
@@ -14,22 +15,22 @@ export function fireworks(scene: Scene) {
   function burst(x: number) {
     const pos = new Float32Array(SPARKS * 3);
     const v = new Float32Array(SPARKS * 3);
-    const y = 9 + Math.random() * 5;
-    const z = -22 - Math.random() * 8;
+    const y = 7 + Math.random() * 4;
+    const z = -16 - Math.random() * 6;
     for (let i = 0; i < SPARKS; i++) {
       // Even spread over a sphere, all moving out at about the same speed.
       const u = Math.random() * 2 - 1;
       const a = Math.random() * Math.PI * 2;
       const r = Math.sqrt(1 - u * u);
-      const speed = 5 + Math.random();
+      const speed = 4 + Math.random();
       v.set([r * Math.cos(a) * speed, u * speed, r * Math.sin(a) * speed], i * 3);
       pos.set([x, y, z], i * 3);
     }
     const geo = new BufferGeometry();
     geo.setAttribute('position', new BufferAttribute(pos, 3));
-    const colour = BOAT_COLOURS[Math.floor(Math.random() * BOAT_COLOURS.length)];
+    const colour = COLOURS[Math.floor(Math.random() * COLOURS.length)];
     const mat = new PointsMaterial({
-      color: colour, size: 0.35, transparent: true, depthWrite: false, blending: AdditiveBlending, fog: false,
+      color: colour, size: 0.4, transparent: true, depthWrite: false, fog: false,
     });
     const p = new Points(geo, mat);
     scene.add(p);
@@ -39,7 +40,7 @@ export function fireworks(scene: Scene) {
   return {
     // About seven bursts over five seconds, spread along the shore in front of x.
     start(x: number) {
-      for (let i = 0; i < 7; i++) queue.push({ at: now + i * 0.7 + Math.random() * 0.3, x: x + (Math.random() - 0.5) * 24 });
+      for (let i = 0; i < 7; i++) queue.push({ at: now + i * 0.7 + Math.random() * 0.3, x: x + (Math.random() - 0.5) * 16 });
     },
 
     update(dt: number) {

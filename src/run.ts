@@ -32,11 +32,11 @@ export function runTogether(send: (m: ClientMsg) => void, headOf: (id: string) =
     unlock();
     send({ t: 'raise' });
   });
-  raise.style.cssText += 'position:fixed;left:16px;bottom:64px;';
+  raise.style.cssText += 'position:fixed;right:16px;top:16px;'; // top corner: the bottom is for boats and stones
   document.body.appendChild(raise);
   const lobby = panel('bottom:120px;');
   const timer = panel('top:16px;');
-  const toast = panel('top:16px;pointer-events:none;');
+  const toast = panel('top:76px;pointer-events:none;'); // below the top buttons
   const fallback = button("I'm resting", () => setMoving(moving ? 0 : 1)); // for phones without a motion sensor
   const clock = text('');
   clock.style.padding = '10px 4px';
