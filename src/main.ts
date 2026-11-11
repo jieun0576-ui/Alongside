@@ -12,7 +12,7 @@ const renderer = new WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // cap for phone GPUs
 document.body.appendChild(renderer.domElement);
 
-const { scene, boardwalk, benches, lake } = buildWorld();
+const { scene, ground, benches, lake } = buildWorld();
 const life = lakeLife(scene);
 const stones = stoneAim(scene);
 const camera = new PerspectiveCamera(55, 1, 0.1, 300);
@@ -134,7 +134,7 @@ renderer.domElement.addEventListener('pointerup', (e) => {
     new Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1),
     camera,
   );
-  const hit = raycaster.intersectObjects([...benches, boardwalk, lake], true)[0];
+  const hit = raycaster.intersectObjects([...benches, ...ground, lake], true)[0];
   if (!hit) return;
   if (aiming) {
     // You can't walk while aiming; only taps on the water count, within reach.

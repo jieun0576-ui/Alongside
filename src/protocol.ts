@@ -1,8 +1,13 @@
 // Shared by the phone and the server. The server trusts nothing a phone sends:
 // every message goes through parseClient before anyone else sees it.
 
-// The strip people can walk on, in metres. x runs along the shore, z toward the lake (negative).
-export const WALK = { minX: -28, maxX: 28, minZ: -2.5, maxZ: 2.5 };
+// The ground, in metres, from the lake inland: boardwalk 5 m, running trail 3 m, grass 30 m.
+// x runs along the shore, z toward the lake (negative).
+export const BOARDWALK = { minZ: -3, maxZ: 2 };
+export const TRAIL = { minZ: 2, maxZ: 5 };
+export const GRASS = { minZ: 5, maxZ: 35 };
+// Where people can walk: all three, kept half a metre in from the edges.
+export const WALK = { minX: -28, maxX: 28, minZ: BOARDWALK.minZ + 0.5, maxZ: GRASS.maxZ - 0.5 };
 // Where stones can land: the lake in front of the boardwalk.
 export const LAKE = { minX: -40, maxX: 40, minZ: -30, maxZ: -3 };
 export const STONE_REACH = 20; // metres from where you stand

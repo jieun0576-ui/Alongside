@@ -4,6 +4,8 @@ import { cooled, parseClient, spend, type Budget } from '../src/protocol.ts';
 
 test('accepts a normal move and rounds it', () => {
   assert.deepEqual(parseClient('{"t":"move","x":1.23456,"z":-2,"s":1}'), { t: 'move', x: 1.23, z: -2, s: 1 });
+  assert.deepEqual(parseClient('{"t":"move","x":0,"z":3.5,"s":0}'), { t: 'move', x: 0, z: 3.5, s: 0 }); // running trail
+  assert.deepEqual(parseClient('{"t":"move","x":0,"z":20,"s":0}'), { t: 'move', x: 0, z: 20, s: 0 }); // grass
 });
 
 test('accepts a boat colour and a stone in the lake', () => {
@@ -17,6 +19,7 @@ test('rejects anything a phone should not send', () => {
     '{"t":"chat","x":0,"z":0,"s":0}', // no chat exists
     '{"t":"move","x":0,"z":-10,"s":0}', // walking in the lake
     '{"t":"move","x":1e9,"z":0,"s":0}', // far away
+    '{"t":"move","x":0,"z":40,"s":0}', // past the grass
     '{"t":"move","x":"0","z":0,"s":0}', // wrong type
     '{"t":"move","x":0,"z":0,"s":2}', // not sit / stand
     '{"t":"move","x":0,"z":0}', // missing field

@@ -2,7 +2,7 @@ import {
   BoxGeometry, Color, Fog, Group, HemisphereLight, DirectionalLight, Mesh,
   MeshLambertMaterial, PlaneGeometry, Scene,
 } from 'three';
-import { WALK } from './protocol';
+import { BOARDWALK, GRASS, TRAIL, WALK } from './protocol';
 
 // shortcut: placeholder shapes until Hoon's Maya models (glTF) are ready.
 
@@ -38,9 +38,11 @@ export function buildWorld() {
   lake.position.y = -0.3;
   scene.add(lake);
 
-  const boardwalk = box(60, 0.3, 6, '#c9a27e', 0, -0.15, 0);
-  scene.add(boardwalk);
-  scene.add(box(60, 0.6, 30, '#9fb38a', 0, -0.2, 18)); // park behind the boardwalk
+  // Boardwalk, running trail and grass, side by side, all with their top at y = 0.
+  const strip = (r: { minZ: number; maxZ: number }, thick: number, color: string) =>
+    box(60, thick, r.maxZ - r.minZ, color, 0, -thick / 2, (r.minZ + r.maxZ) / 2);
+  const ground = [strip(BOARDWALK, 0.3, '#c9a27e'), strip(TRAIL, 0.3, '#b07f68'), strip(GRASS, 0.6, '#9fb38a')];
+  scene.add(...ground);
 
   // Benches face the lake. Each is one group so a tap anywhere on it counts.
   const benches: Group[] = [];
@@ -59,5 +61,5 @@ export function buildWorld() {
   [[-50, 6, 10], [-38, 10, 8], [-24, 4, 12], [-8, 14, 7], [6, 8, 10], [20, 18, 6], [34, 7, 12], [48, 11, 9]]
     .forEach(([x, h, w]) => scene.add(box(w, h, 6, '#b7a3a8', x, h / 2 - 0.3, -80)));
 
-  return { scene, boardwalk, benches, lake };
+  return { scene, ground, benches, lake };
 }
