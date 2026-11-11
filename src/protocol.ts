@@ -5,6 +5,7 @@
 export const WALK = { minX: -28, maxX: 28, minZ: -2.5, maxZ: 2.5 };
 export const MAX_PEOPLE = 30; // per waterfront
 export const MAX_MSGS_PER_SEC = 10;
+export const MAX_PER_ADDRESS = 4; // a family or a cafe on one Wi-Fi can still come together
 
 // Where someone is heading, and whether they sit down when they get there.
 export type Pose = { x: number; z: number; s: 0 | 1 };
@@ -35,4 +36,12 @@ export function parseMove(raw: unknown): Pose | null {
   if (!inWalk(x, z) || (s !== 0 && s !== 1)) return null;
   // Rebuild the object so no extra fields ride along to other phones.
   return { x: Math.round(x * 100) / 100, z: Math.round(z * 100) / 100, s };
+}
+
+// Per-phone message budget: at most MAX_MSGS_PER_SEC in each clock second.
+export type Budget = { second: number; count: number };
+export function spend(b: Budget | undefined, nowMs: number): { budget: Budget; ok: boolean } {
+  const second = Math.floor(nowMs / 1000);
+  const count = b && b.second === second ? b.count + 1 : 1;
+  return { budget: { second, count }, ok: count <= MAX_MSGS_PER_SEC };
 }
