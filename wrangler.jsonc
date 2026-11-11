@@ -1,0 +1,7 @@
+// Cloudflare Workers: serve the built site in dist/ as static files.
+{
+  "name": "alongside",
+  "compatibility_date": "2026-11-10",
+  "assets": { "directory": "./dist" },
+  "previews": {} // lets PR builds make a preview link (`wrangler preview`)
+}
