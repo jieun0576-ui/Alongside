@@ -6,7 +6,7 @@ export function pickCharacter(start: number, onShow: (k: number) => void, onPick
   let k = start;
   const layer = document.createElement('div');
   layer.style.cssText =
-    'position:fixed;inset:0;z-index:10;display:flex;background:linear-gradient(#f6e0cf 72px,#f6e0cf00 130px);' +
+    'position:fixed;inset:0;z-index:10;display:flex;background:linear-gradient(#fbe3d0 72px,#fbe3d000 130px);' +
     'flex-direction:column;justify-content:space-between;align-items:center;' +
     'padding:max(24px,env(safe-area-inset-top)) 16px max(32px,env(safe-area-inset-bottom));' +
     'font:15px system-ui,sans-serif;color:#4d3a2a;';

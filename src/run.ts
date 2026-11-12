@@ -200,6 +200,7 @@ export function runTogether(send: (m: ClientMsg) => void, headOf: (id: string) =
     // You're in a run (or someone joined, left or came back).
     onRun(ids: string[], msLeft: number, k: string) {
       if (!endAt) {
+        showHowTo();
         keepAwake();
         samples = [];
         sensed = false;
@@ -281,4 +282,34 @@ export function runTogether(send: (m: ClientMsg) => void, headOf: (id: string) =
       }
     },
   };
+}
+
+// At the start of a run: a little figure jogging in place with a phone in hand, for a few seconds.
+function showHowTo() {
+  const card = document.createElement('div');
+  card.style.cssText =
+    'position:fixed;z-index:5;left:50%;top:50%;transform:translate(-50%,-50%);padding:18px 26px 14px;border-radius:24px;' +
+    'background:#fbfaf6e8;pointer-events:none;text-align:center;font:15px system-ui,sans-serif;color:#4d3a2a;';
+  card.innerHTML = `<svg width="96" height="120" viewBox="0 0 96 120" fill="none" stroke="#4d3a2a" stroke-width="6"
+    stroke-linecap="round" stroke-linejoin="round">
+    <style>
+      .bob { animation: bob .5s ease-in-out infinite alternate; }
+      .legA { transform-origin: 48px 70px; animation: leg .5s ease-in-out infinite alternate; }
+      .legB { transform-origin: 48px 70px; animation: leg .5s ease-in-out infinite alternate-reverse; }
+      @keyframes bob { from { transform: translateY(0) } to { transform: translateY(-5px) } }
+      @keyframes leg { from { transform: rotate(-25deg) } to { transform: rotate(25deg) } }
+    </style>
+    <g class="legA"><path d="M48 70 L44 92 L48 112"/></g>
+    <g class="legB"><path d="M48 70 L52 92 L48 112"/></g>
+    <g class="bob">
+      <circle cx="48" cy="16" r="10"/>
+      <path d="M48 28 V70"/>
+      <path d="M48 38 L30 52 L40 64"/>
+      <path d="M48 38 L64 50 L70 40"/>
+      <rect x="64" y="22" width="14" height="22" rx="3" fill="#4d3a2a" stroke-width="3"/>
+    </g>
+  </svg><div style="margin-top:6px">Move with your phone</div>`;
+  document.body.appendChild(card);
+  card.animate([{ opacity: 0 }, { opacity: 1, offset: 0.1 }, { opacity: 1, offset: 0.85 }, { opacity: 0 }], { duration: 4500 })
+    .onfinish = () => card.remove();
 }
