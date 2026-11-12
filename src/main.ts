@@ -10,8 +10,9 @@ import { fireworks } from './fireworks';
 import { edgeMarkers } from './edges';
 import { HEIGHT, dropLook, fade, makeLook, play, type Look } from './characters';
 import { pickCharacter } from './picker';
+import { hold, sound } from './sounds';
 import {
-  BOAT_COLOURS, BOAT_EVERY_MS, CHARACTERS, RUN_PACE, STONE_EVERY_MS, STONE_REACH, inLake, trailSpot, type Pose, type Runner,
+  BOARDWALK, BOAT_COLOURS, BOAT_EVERY_MS, CHARACTERS, RUN_PACE, STONE_EVERY_MS, STONE_REACH, inLake, trailSpot, type Pose, type Runner,
 } from './protocol';
 
 const renderer = new WebGLRenderer({ antialias: true });
@@ -220,10 +221,11 @@ const send = connect(
       if (m.id === myId) endMyRun(m.f === 1);
     } else if (m.t === 'boat') {
       life.addBoat(m.b);
+      sound('boat');
     } else if (m.t === 'ripple') {
       const w = others.get(m.id);
-      if (w) stones.fly(w.body.position.clone().setY(HAND_Y), m.x, m.z, () => life.ripple(m.x, m.z));
-      else life.ripple(m.x, m.z);
+      if (w) stones.fly(w.body.position.clone().setY(HAND_Y), m.x, m.z, () => splash(m.x, m.z));
+      else splash(m.x, m.z);
     }
   },
   () => {
@@ -240,7 +242,10 @@ function endMyRun(together: boolean) {
   allMoving = false;
   saveKey('');
   run.onEnd(together);
-  if (together) show.start(me.body.position.x);
+  if (together) {
+    show.start(me.body.position.x);
+    sound('firework');
+  }
 }
 
 // Where someone's head is on screen (for thumbs and runner numbers), or null when they're not in view.
@@ -249,6 +254,12 @@ function headOf(id: string) {
   if (!w) return null;
   const s = onScreen(w.body.position, HEIGHT + 0.2);
   return head.z < 1 ? s : null;
+}
+
+// A stone landing: rings on the water and its sound.
+function splash(x: number, z: number) {
+  life.ripple(x, z);
+  sound('ripple');
 }
 
 // Finishing together: fireworks over the water.
@@ -324,7 +335,7 @@ function throwStone() {
   lastThrow = now;
   const { x, z } = stones.target;
   send({ t: 'stone', x, z });
-  stones.throwStone(() => life.ripple(x, z));
+  stones.throwStone(() => splash(x, z));
 }
 
 // The buttons only appear once you're standing or sitting by the water.
@@ -397,6 +408,9 @@ function showTools() {
 const camGoal = new Vector3();
 function update(dt: number) {
   step(me, dt);
+  // The lake: loudest at the water's edge, fading to a murmur 20 m inland.
+  hold('wave', true, 0.15 + 0.85 * Math.min(1, Math.max(0, 1 - (me.body.position.z - BOARDWALK.minZ) / 20)));
+  hold('walk', me.run ? me.run.m === 1 : !me.arrived, 1.6); // your own footsteps while you walk or run
   if (picking) me.body.rotation.y = 0; // facing you while you choose
   life.update(dt);
   stones.update(dt);
