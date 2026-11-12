@@ -11,6 +11,7 @@ import { edgeMarkers } from './edges';
 import { HEIGHT, dropLook, fade, makeLook, play, type Look } from './characters';
 import { pickCharacter } from './picker';
 import { hold, sound } from './sounds';
+import { seagulls } from './gulls';
 import {
   BOARDWALK, BOAT_COLOURS, BOAT_EVERY_MS, CHARACTERS, RUN_PACE, STONE_EVERY_MS, STONE_REACH, inLake, trailSpot, type Pose, type Runner,
 } from './protocol';
@@ -21,6 +22,7 @@ document.body.appendChild(renderer.domElement);
 
 const { scene, ground, benches, lake, park } = buildWorld();
 const life = lakeLife(scene);
+const gulls = seagulls(scene);
 const stones = stoneAim(scene);
 const camera = new PerspectiveCamera(55, 1, 0.1, 300);
 
@@ -409,6 +411,7 @@ const camGoal = new Vector3();
 function update(dt: number) {
   step(me, dt);
   park.update(me.body.position, dt);
+  gulls.update(dt);
   // The lake: loudest at the water's edge, fading to a murmur 20 m inland.
   hold('wave', true, 0.15 + 0.85 * Math.min(1, Math.max(0, 1 - (me.body.position.z - BOARDWALK.minZ) / 20)));
   hold('walk', me.run ? me.run.m === 1 : !me.arrived, 1.6); // your own footsteps while you walk or run

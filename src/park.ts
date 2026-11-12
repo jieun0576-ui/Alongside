@@ -1,12 +1,12 @@
 import {
-  BoxGeometry, CanvasTexture, Color, ConeGeometry, CylinderGeometry, DodecahedronGeometry, Group, InstancedMesh,
+  BoxGeometry, CanvasTexture, Color, CylinderGeometry, DodecahedronGeometry, Group, InstancedMesh,
   Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PlaneGeometry, RepeatWrapping, SRGBColorSpace, type BufferGeometry,
   type Material, type Scene,
 } from 'three';
 import { BOARDWALK, GRASS, TRAIL } from './protocol';
 
 // A low-poly park by the lake in the spirit of Toronto's Harbourfront: a plank boardwalk with a stone edge,
-// lamps, a row of street trees along the trail, a park with paths and tree clumps, boats at mooring,
+// lamps, a row of street trees along the trail, a park with paths and tree clumps,
 // and the green islands across the water. Only for looks: taps still land on the ground strips.
 // shortcut: hand-placed shapes; Hoon's OpenStreetMap model can replace this later.
 
@@ -127,13 +127,6 @@ export function buildPark(scene: Scene, boardwalk: Mesh) {
   const flowers: { x: number; y: number; z: number }[] = [];
   for (let x = -24; x <= 24; x += 12) flowers.push({ x: x + 3, y: 0.15, z: GRASS.minZ + 2.4 });
   park.add(many(new BoxGeometry(2.4, 0.3, 0.9), flat('#d98c8c'), flowers));
-
-  // Sailboats at mooring out on the lake.
-  const hulls: { x: number; y: number; z: number; r: number }[] = [];
-  for (const [x, z] of [[-22, -14], [-9, -19], [5, -13], [17, -21], [27, -15]]) hulls.push({ x, y: -0.15, z, r: rand() * 0.6 - 0.3 });
-  park.add(many(new BoxGeometry(3.2, 0.5, 1.1), flat('#f4efe6'), hulls));
-  park.add(many(new CylinderGeometry(0.04, 0.04, 5, 4).translate(0, 2.6, 0), flat('#8a8580'), hulls));
-  park.add(many(new ConeGeometry(1, 4, 3).scale(1, 1, 0.1).translate(0.6, 2.8, 0), flat('#fbfaf6'), hulls));
 
   // The islands across the bay: long, low and green, with trees.
   const islands = flat('#8fa883');
