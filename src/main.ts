@@ -19,7 +19,7 @@ const renderer = new WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // cap for phone GPUs
 document.body.appendChild(renderer.domElement);
 
-const { scene, ground, benches, lake } = buildWorld();
+const { scene, ground, benches, lake, park } = buildWorld();
 const life = lakeLife(scene);
 const stones = stoneAim(scene);
 const camera = new PerspectiveCamera(55, 1, 0.1, 300);
@@ -408,6 +408,7 @@ function showTools() {
 const camGoal = new Vector3();
 function update(dt: number) {
   step(me, dt);
+  park.update(me.body.position, dt);
   // The lake: loudest at the water's edge, fading to a murmur 20 m inland.
   hold('wave', true, 0.15 + 0.85 * Math.min(1, Math.max(0, 1 - (me.body.position.z - BOARDWALK.minZ) / 20)));
   hold('walk', me.run ? me.run.m === 1 : !me.arrived, 1.6); // your own footsteps while you walk or run
