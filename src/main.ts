@@ -12,7 +12,7 @@ import { HEIGHT, dropLook, fade, makeLook, play, type Look } from './characters'
 import { pickCharacter } from './picker';
 import { hold, sound } from './sounds';
 import {
-  BOAT_COLOURS, BOAT_EVERY_MS, CHARACTERS, RUN_PACE, STONE_EVERY_MS, STONE_REACH, inLake, trailSpot, type Pose, type Runner,
+  BOARDWALK, BOAT_COLOURS, BOAT_EVERY_MS, CHARACTERS, RUN_PACE, STONE_EVERY_MS, STONE_REACH, inLake, trailSpot, type Pose, type Runner,
 } from './protocol';
 
 const renderer = new WebGLRenderer({ antialias: true });
@@ -408,8 +408,9 @@ function showTools() {
 const camGoal = new Vector3();
 function update(dt: number) {
   step(me, dt);
-  hold('wave', true, 0.6); // the lake, always
-  hold('walk', me.run ? me.run.m === 1 : !me.arrived); // your own footsteps while you walk or run
+  // The lake: loudest at the water's edge, fading to a murmur 20 m inland.
+  hold('wave', true, 0.15 + 0.85 * Math.min(1, Math.max(0, 1 - (me.body.position.z - BOARDWALK.minZ) / 20)));
+  hold('walk', me.run ? me.run.m === 1 : !me.arrived, 1.6); // your own footsteps while you walk or run
   if (picking) me.body.rotation.y = 0; // facing you while you choose
   life.update(dt);
   stones.update(dt);

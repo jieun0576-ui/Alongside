@@ -5,7 +5,7 @@ const NAMES: Name[] = ['boat', 'click', 'firework', 'ripple', 'walk', 'wave'];
 
 let ctx: AudioContext | null = null;
 const buffers = new Map<Name, AudioBuffer>();
-const loops = new Map<Name, AudioBufferSourceNode>();
+const loops = new Map<Name, { src: AudioBufferSourceNode; gain: GainNode }>();
 
 function start() {
   if (ctx) {
@@ -29,7 +29,7 @@ document.addEventListener('visibilitychange', () => {
 });
 // Every button gives a soft click.
 addEventListener('click', (e) => {
-  if ((e.target as Element).closest?.('button')) sound('click', 0.5);
+  if ((e.target as Element).closest?.('button')) sound('click', 0.3);
 }, true);
 
 export function sound(n: Name, volume = 1) {
@@ -41,20 +41,21 @@ export function sound(n: Name, volume = 1) {
   gain.gain.value = volume;
   src.connect(gain).connect(ctx.destination);
   src.start();
-  return src;
+  return { src, gain };
 }
 
-// A looping sound that plays while `on` is true (call it every frame; it only acts on a change).
+// A looping sound that plays while `on` is true, at `volume` (call it every frame).
 export function hold(n: Name, on: boolean, volume = 1) {
   const now = loops.get(n);
+  if (now && on) now.gain.gain.value = volume;
   if (on === !!now) return;
   if (now) {
-    now.stop();
+    now.src.stop();
     loops.delete(n);
     return;
   }
-  const src = sound(n, volume);
-  if (!src) return;
-  src.loop = true;
-  loops.set(n, src);
+  const played = sound(n, volume);
+  if (!played) return;
+  played.src.loop = true;
+  loops.set(n, played);
 }
