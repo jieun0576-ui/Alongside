@@ -1,4 +1,5 @@
 import { GLASS, LIGHT_TEXT } from './style';
+import { ICONS } from './icons';
 import { RUN_MINUTES, type ClientMsg, type Thumb } from './protocol';
 
 // Run Together, the phone side: raised thumbs, the host's choices, the time left, and whether you're moving.
@@ -29,11 +30,14 @@ function button(text: string, onclick: () => void) {
 const text = (t: string) => Object.assign(document.createElement('span'), { textContent: t });
 
 export function runTogether(send: (m: ClientMsg) => void, headOf: (id: string) => Screen, myId: () => string) {
-  const raise = button('Up for a run?', () => {
+  const raise = button('', () => {
     unlock();
     send({ t: 'raise' });
   });
-  raise.style.cssText += 'position:fixed;right:16px;top:16px;'; // top corner: the bottom is for boats and stones
+  raise.innerHTML = ICONS.run;
+  raise.ariaLabel = 'Up for a run?';
+  // top corner: the bottom is for boats and stones
+  raise.style.cssText += 'position:fixed;right:16px;top:16px;width:52px;height:52px;padding:0;display:flex;align-items:center;justify-content:center;';
   document.body.appendChild(raise);
   const lobby = panel('bottom:120px;');
   const timer = panel('top:16px;');

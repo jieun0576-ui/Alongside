@@ -1,15 +1,19 @@
 import { GLASS, LIGHT_TEXT } from './style';
+import { ICONS } from './icons';
 
 // Right after choosing a character, a short guide, one step at a time:
 // 1. walk (moves on once you've tapped the ground and got there),
-// 2. stones and boats, with an arrow pointing at the water's edge (moves on after a throw, a boat, or "Next"),
-// 3. running together, with an arrow pointing at "Up for a run?" ("Got it" ends it).
+// 2. sitting on the edge, stones and boats, with an arrow pointing at the water's edge (moves on after a throw, a boat, or "Next"),
+// 3. running together, with an arrow pointing at the run button ("Got it" ends it).
 type Point = { x: number; y: number };
+// A button's icon, small, inside the text.
+const icon = (k: keyof typeof ICONS) =>
+  `<span style="display:inline-block;vertical-align:-6px;border:1.5px solid #ffffffb8;border-radius:999px;padding:2px;margin:0 2px">${ICONS[k].replace(/26/g, '16')}</span>`;
 const STEPS = [
   ['👆', 'Walk', 'Tap the ground to walk there. Tap a bench to sit.'],
-  ['🪨', 'By the water', 'Walk to the water’s edge, where the arrow points. There you can throw a stone or release a boat.'],
-  ['⛵', 'By the water', 'Tap “Throw a stone”, tap the lake to aim, then swipe up from your head. Or tap “Release a boat” and pick a colour.'],
-  ['🏃', 'Run together', 'Tap “Up for a run?” and others can join you. Keep your phone with you as you move.'],
+  ['🪨', 'By the water', 'Walk to the water’s edge, where the arrow points. There you can sit on the edge, throw a stone or release a boat.'],
+  ['⛵', 'By the water', `${icon('sit')} sits on the edge. ${icon('stone')} throws a stone: tap the lake to aim, then swipe up from your head. ${icon('boat')} lets a paper boat go.`],
+  ['🏃', 'Run together', `Tap ${icon('run')} and others can join you. Keep your phone with you as you move.`],
 ];
 // An arrow pointing down; turned around to point up.
 const ARROW = '<svg width="28" height="40" viewBox="0 0 28 40" fill="none" stroke="#fff" stroke-width="4" ' +

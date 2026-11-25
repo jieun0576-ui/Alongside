@@ -11,11 +11,13 @@ import { edgeMarkers } from './edges';
 import { HEIGHT, dropLook, fade, makeLook, play, type Look } from './characters';
 import { pickCharacter } from './picker';
 import { startGuide } from './help';
+import { ICONS } from './icons';
+import { sparkles } from './hop';
 import { hold, sound } from './sounds';
 import { seagulls } from './gulls';
 import { GLASS } from './style';
 import {
-  BOARDWALK, BOAT_COLOURS, BOAT_EVERY_MS, CHARACTERS, RUN_PACE, STONE_EVERY_MS, STONE_REACH, inLake, trailSpot, type Pose, type Runner,
+  BOARDWALK, WALK, BOAT_COLOURS, BOAT_EVERY_MS, CHARACTERS, RUN_PACE, STONE_EVERY_MS, STONE_REACH, inLake, trailSpot, type Pose, type Runner,
 } from './protocol';
 
 const renderer = new WebGLRenderer({ antialias: true });
@@ -32,16 +34,20 @@ const camera = new PerspectiveCamera(55, 1, 0.1, 300);
 // body sits on the ground at their feet; the character model inside it arrives once loaded.
 const WALK_SPEED = 1.6; // metres per second, an easy stroll
 const SEAT_Y = 0.45; // lifts a sitting character so they rest on the bench seat
+const EDGE_Z = BOARDWALK.minZ + 0.15; // sitting on the stone edge, feet over the water
+const EDGE_Y = 0.02;
 // run: set while this person is in a run; `at` is when we heard (performance.now() ms).
 type Walker = {
   body: Group; k: number; look?: Look; away: boolean; seated: boolean;
   goal: Pose; arrived: boolean; run?: Runner & { at: number };
+  hopUntil?: number; // performance.now() ms: hopping until then
 };
 
-function sit(w: Walker, seated: boolean) {
-  w.seated = seated;
-  w.body.position.y = seated ? SEAT_Y : 0;
-  if (seated) w.body.rotation.y = Math.PI; // facing the lake
+function sit(w: Walker, s: 0 | 1 | 2) {
+  w.seated = s > 0;
+  w.body.position.y = s === 1 ? SEAT_Y : s === 2 ? EDGE_Y : 0;
+  if (s === 2) w.body.position.z = EDGE_Z; // a step past where you can walk, onto the stone
+  if (s) w.body.rotation.y = Math.PI; // facing the lake
 }
 
 function addWalker(at: Pose, k: number): Walker {
@@ -51,7 +57,7 @@ function addWalker(at: Pose, k: number): Walker {
   scene.add(body);
   const w: Walker = { body, k: -1, away: false, seated: false, goal: at, arrived: true };
   setLook(w, k);
-  sit(w, at.s === 1);
+  sit(w, at.s);
   return w;
 }
 
@@ -74,7 +80,7 @@ function setLook(w: Walker, k: number) {
 }
 
 function setGoal(w: Walker, goal: Pose) {
-  sit(w, false);
+  sit(w, 0);
   w.goal = goal;
   w.arrived = false;
 }
@@ -92,14 +98,14 @@ function step(w: Walker, dt: number) {
       p.x = w.goal.x;
       p.z = w.goal.z;
       w.arrived = true;
-      if (w.goal.s) sit(w, true);
+      if (w.goal.s) sit(w, w.goal.s);
     } else {
       p.x += (dx / dist) * stride;
       p.z += (dz / dist) * stride;
     }
   }
   if (!w.look) return;
-  play(w.look, w.seated ? 'sit' : w.run ? (w.run.m ? 'sprint' : 'idle') : w.arrived ? 'idle' : 'walk');
+  play(w.look, (w.hopUntil ?? 0) > performance.now() ? 'jump' : w.seated ? 'sit' : w.run ? (w.run.m ? 'sprint' : 'idle') : w.arrived ? 'idle' : 'walk');
   w.look.mixer.update(dt);
 }
 
@@ -118,7 +124,7 @@ function runStep(w: Walker, r: Runner & { at: number }, dt: number) {
 function setRunner(r: Runner) {
   const w = r.id === myId ? me : others.get(r.id);
   if (!w) return;
-  sit(w, false);
+  sit(w, 0);
   if (!w.run) {
     // Just started (or came back): carried straight to their place on the trail.
     const spot = trailSpot(r.d, r.l);
@@ -348,14 +354,16 @@ function throwStone() {
 const tools = document.createElement('div');
 tools.style.cssText = 'position:fixed;right:16px;bottom:64px;display:none;gap:10px;';
 const pill = 'border:none;border-radius:999px;';
-const button = (text: string) => {
+const button = (icon: string, label: string) => {
   const b = document.createElement('button');
-  b.textContent = text;
-  b.style.cssText = `padding:10px 16px;${GLASS}`;
+  b.innerHTML = icon;
+  b.ariaLabel = label;
+  b.style.cssText = `${GLASS}width:52px;height:52px;padding:0;display:flex;align-items:center;justify-content:center;`;
   return b;
 };
-const stoneButton = button('Throw a stone');
-const boatButton = button('Release a boat');
+const sitButton = button(ICONS.sit, 'Sit on the edge');
+const stoneButton = button(ICONS.stone, 'Throw a stone');
+const boatButton = button(ICONS.boat, 'Release a boat');
 // While aiming, a white arrow keeps rising from your head: swipe up here to throw.
 const arrow = document.createElement('div');
 arrow.innerHTML = '<svg width="28" height="44" viewBox="0 0 28 44" fill="none" stroke="#fff" stroke-width="4" ' +
@@ -369,7 +377,9 @@ arrow.firstElementChild!.animate(
 stoneButton.onclick = () => setAiming(!aiming);
 function setAiming(on: boolean) {
   aiming = on;
-  stoneButton.textContent = aiming ? 'Done' : 'Throw a stone';
+  stoneButton.innerHTML = aiming ? ICONS.done : ICONS.stone;
+  stoneButton.ariaLabel = aiming ? 'Done' : 'Throw a stone';
+  sitButton.style.display = aiming ? 'none' : '';
   boatButton.style.display = aiming ? 'none' : '';
   arrow.style.display = aiming ? 'block' : 'none';
   palette.style.display = 'none';
@@ -398,7 +408,12 @@ for (const [i, colour] of BOAT_COLOURS.entries()) {
   palette.appendChild(dot);
 }
 boatButton.onclick = () => (palette.style.display = palette.style.display === 'flex' ? 'none' : 'flex');
-tools.append(stoneButton, boatButton);
+// Sit on the stone edge right where you are, feet over the water. Tap the ground to get up.
+sitButton.onclick = () => {
+  setGoal(me, { x: me.body.position.x, z: WALK.minZ, s: 2 });
+  send({ t: 'move', ...me.goal });
+};
+tools.append(sitButton, stoneButton, boatButton);
 document.body.append(palette, tools, arrow);
 
 let nearWater = false;
@@ -406,10 +421,45 @@ function showTools() {
   // No boats or stones during a run; a run that starts mid-aim puts the stone away.
   if (run.running && aiming) setAiming(false);
   const near = !run.running && (aiming || (me.arrived && me.body.position.z <= NEAR_WATER_Z));
+  sitButton.style.opacity = me.goal.s === 2 || aiming ? '0' : '1'; // already sitting there
+  sitButton.style.pointerEvents = me.goal.s === 2 || aiming ? 'none' : '';
   if (near === nearWater) return;
   nearWater = near;
   tools.style.display = near ? 'flex' : 'none';
   if (!near) palette.style.display = 'none';
+}
+
+// Bumping into someone: both hop with sparkles between them, then each phone steps its own character aside.
+// Every phone checks every pair, so people watching see the hop too.
+const BUMP_M = 0.6;
+const HOP_MS = 1000;
+const hops = sparkles(scene);
+const bumped = new Map<string, number>(); // pair → when they last hopped, so it happens once per meeting
+function bumps() {
+  const all: [string, Walker][] = [[myId, me], ...others];
+  const now = performance.now();
+  for (let i = 0; i < all.length; i++) {
+    for (let j = i + 1; j < all.length; j++) {
+      const [ia, a] = all[i];
+      const [ib, b] = all[j];
+      if ([a, b].some((w) => w.run || w.seated || w.away || !w.arrived)) continue;
+      const dx = a.body.position.x - b.body.position.x;
+      const dz = a.body.position.z - b.body.position.z;
+      if (Math.hypot(dx, dz) > BUMP_M) continue;
+      const pair = ia < ib ? ia + ib : ib + ia;
+      if (now - (bumped.get(pair) ?? -Infinity) < 4000) continue;
+      bumped.set(pair, now);
+      a.hopUntil = b.hopUntil = now + HOP_MS;
+      hops.at((a.body.position.x + b.body.position.x) / 2, (a.body.position.z + b.body.position.z) / 2);
+      if (a !== me) continue; // only step your own character aside, away from the other
+      const side = dx ? Math.sign(dx) : ia < ib ? -1 : 1;
+      setTimeout(() => {
+        if (!me.arrived || me.seated || me.run) return; // you've already moved on
+        setGoal(me, { ...clampToWalk(me.body.position.x + side * 0.9, me.body.position.z), s: 0 });
+        send({ t: 'move', ...me.goal });
+      }, HOP_MS);
+    }
+  }
 }
 
 const camGoal = new Vector3();
@@ -430,6 +480,8 @@ function update(dt: number) {
     camera,
   );
   showTools();
+  bumps();
+  hops.update(dt);
   guide?.update(nearWater, me.arrived);
   if (aiming) {
     const h = headOnScreen();

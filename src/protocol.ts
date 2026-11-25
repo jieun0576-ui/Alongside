@@ -28,8 +28,8 @@ export const CHARACTERS = ['female', 'knight', 'male', 'worker', 'zombie'];
 // Floating Thoughts: a boat is only ever one of these colours, never free text.
 export const BOAT_COLOURS = ['#f2c6c2', '#f6dfa4', '#bfe0c5', '#b9d4ee', '#d8c8ec', '#fbfaf6'];
 
-// Where someone is heading, and whether they sit down when they get there.
-export type Pose = { x: number; z: number; s: 0 | 1 };
+// Where someone is heading, and whether they sit down when they get there: 1 on a bench, 2 on the stone edge by the water.
+export type Pose = { x: number; z: number; s: 0 | 1 | 2 };
 export type Person = Pose & { id: string; k: number }; // k: which character they chose
 export type Boat = { x: number; c: number; age: number }; // age in seconds when sent
 
@@ -100,7 +100,7 @@ export function parseClient(raw: unknown): ClientMsg | null {
   if (typeof m !== 'object' || m === null) return null;
   const { t, x, z, s, c, id, d } = m as Record<string, unknown>;
   // Each branch rebuilds the object so no extra fields ride along to other phones.
-  if (t === 'move' && num(x) && num(z) && inWalk(x, z) && (s === 0 || s === 1)) return { t, x: cm(x), z: cm(z), s };
+  if (t === 'move' && num(x) && num(z) && inWalk(x, z) && (s === 0 || s === 1 || (s === 2 && z <= WALK.minZ + 0.3))) return { t, x: cm(x), z: cm(z), s };
   if (t === 'boat' && Number.isInteger(c) && (c as number) >= 0 && (c as number) < BOAT_COLOURS.length) {
     return { t, c: c as number };
   }
