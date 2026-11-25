@@ -415,7 +415,6 @@ function update(dt: number) {
   // The lake: loudest at the water's edge, fading to a murmur 20 m inland.
   hold('wave', true, 0.15 + 0.85 * Math.min(1, Math.max(0, 1 - (me.body.position.z - BOARDWALK.minZ) / 20)));
   hold('walk', me.run ? me.run.m === 1 : !me.arrived, 1.6); // your own footsteps while you walk or run
-  if (picking) me.body.rotation.y = 0; // facing you while you choose
   life.update(dt);
   stones.update(dt);
   run.update(dt);
@@ -437,13 +436,10 @@ function update(dt: number) {
   for (const w of others.values()) step(w, dt);
   // Camera eases along behind you, looking out over the lake.
   // While aiming it steps to the side, so the stone's arc can be seen.
-  // While you choose your character, it comes up close.
-  if (picking) camGoal.set(me.body.position.x, 1.4, me.body.position.z + 3.4);
-  else if (aiming) camGoal.set(me.body.position.x + 6, 5, me.body.position.z + 7);
+  if (aiming) camGoal.set(me.body.position.x + 6, 5, me.body.position.z + 7);
   else camGoal.set(me.body.position.x, 6, me.body.position.z + 10);
   camera.position.lerp(camGoal, 1 - Math.exp(-3 * dt));
-  if (picking) camera.lookAt(me.body.position.x, 0.8, me.body.position.z);
-  else camera.lookAt(me.body.position.x, 0, me.body.position.z - 5);
+  camera.lookAt(me.body.position.x, 0, me.body.position.z - 5);
 }
 
 function resize() {
@@ -455,15 +451,12 @@ function resize() {
 addEventListener('resize', resize);
 resize();
 
-// First thing on opening: choose who you'll be, while the waterfront carries on around you.
-let picking = true;
-camera.position.set(me.body.position.x, 1.4, me.body.position.z + 3.4);
+// First thing on opening: choose who you'll be, while the waterfront carries on behind.
+camera.position.set(me.body.position.x, 6, me.body.position.z + 10);
 pickCharacter(
   saved,
   (k) => setLook(me, k),
   (k) => {
-    picking = false;
-    me.body.rotation.y = Math.PI; // turn to the water
     send({ t: 'look', k });
     try {
       localStorage.setItem('look', String(k));
