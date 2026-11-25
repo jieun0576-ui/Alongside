@@ -36,12 +36,21 @@ export function runTogether(send: (m: ClientMsg) => void, headOf: (id: string) =
   });
   raise.innerHTML = ICONS.run;
   raise.ariaLabel = 'Up for a run?';
-  // top corner: the bottom is for boats and stones
-  raise.style.cssText += 'position:fixed;right:16px;top:16px;width:52px;height:52px;padding:0;display:flex;align-items:center;justify-content:center;';
+  // The sunset button: a warm round button at the bottom left (the bottom right is for boats and stones),
+  // with a soft glow that slowly breathes.
+  raise.style.cssText += 'position:fixed;left:16px;bottom:64px;width:64px;height:64px;padding:0;display:flex;' +
+    'align-items:center;justify-content:center;background:#ff8a5c;border:none;';
+  raise.querySelector('svg')!.setAttribute('width', '30');
+  raise.querySelector('svg')!.setAttribute('height', '30');
+  raise.animate(
+    [{ boxShadow: '0 0 0 4px #ff8a5c55,0 0 0 10px #ff8a5c22,0 6px 16px #0004' },
+      { boxShadow: '0 0 0 9px #ff8a5c44,0 0 0 18px #ff8a5c18,0 6px 16px #0004' }],
+    { duration: 1600, iterations: Infinity, direction: 'alternate', easing: 'ease-in-out' },
+  );
   document.body.appendChild(raise);
   const lobby = panel('bottom:120px;');
   const timer = panel('top:16px;');
-  const toast = panel('top:76px;pointer-events:none;'); // below the top buttons
+  const toast = panel('top:76px;pointer-events:none;'); // below the timer
   const fallback = button("I'm resting", () => setMoving(moving ? 0 : 1)); // for phones without a motion sensor
   const clock = text('');
   clock.style.padding = '10px 4px';
