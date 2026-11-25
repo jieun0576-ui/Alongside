@@ -10,7 +10,7 @@ import { fireworks } from './fireworks';
 import { edgeMarkers } from './edges';
 import { HEIGHT, dropLook, fade, makeLook, play, type Look } from './characters';
 import { pickCharacter } from './picker';
-import { showHelp } from './help';
+import { startGuide } from './help';
 import { hold, sound } from './sounds';
 import { seagulls } from './gulls';
 import { GLASS } from './style';
@@ -331,6 +331,7 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   send({ t: 'move', ...me.goal });
   tapMark.position.set(me.goal.x, 0.01, me.goal.z);
   tapAge = 0;
+  guide?.walked();
 });
 
 function throwStone() {
@@ -340,6 +341,7 @@ function throwStone() {
   const { x, z } = stones.target;
   send({ t: 'stone', x, z });
   stones.throwStone(() => splash(x, z));
+  guide?.used();
 }
 
 // The buttons only appear once you're standing or sitting by the water.
@@ -384,6 +386,7 @@ for (const [i, colour] of BOAT_COLOURS.entries()) {
   dot.style.cssText = `width:36px;height:36px;padding:0;background:${colour};box-shadow:0 0 0 2px #fff8;${pill}`;
   dot.onclick = () => {
     send({ t: 'boat', c: i }); // the boat appears when the room sends it back to everyone
+    guide?.used();
     palette.style.display = 'none';
     boatButton.disabled = true; // one boat per 10 s, same as the server allows
     boatButton.style.opacity = '0.5';
@@ -427,6 +430,7 @@ function update(dt: number) {
     camera,
   );
   showTools();
+  guide?.update(nearWater, me.arrived);
   if (aiming) {
     const h = headOnScreen();
     arrow.style.left = `${h.x - 14}px`;
@@ -453,6 +457,8 @@ function resize() {
 addEventListener('resize', resize);
 resize();
 
+let guide: ReturnType<typeof startGuide> | undefined; // the step-by-step tips after choosing
+
 // First thing on opening: choose who you'll be, while the waterfront carries on behind.
 camera.position.set(me.body.position.x, 6, me.body.position.z + 10);
 pickCharacter(
@@ -460,7 +466,7 @@ pickCharacter(
   (k) => setLook(me, k),
   (k) => {
     send({ t: 'look', k });
-    showHelp();
+    guide = startGuide(() => onScreen(new Vector3(me.body.position.x, 0, BOARDWALK.minZ), 0), run.raise);
     try {
       localStorage.setItem('look', String(k));
     } catch {

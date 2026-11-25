@@ -184,6 +184,7 @@ export function runTogether(send: (m: ClientMsg) => void, headOf: (id: string) =
   }
 
   return {
+    raise, // the guide points at it
     get running() {
       return endAt > 0;
     },
