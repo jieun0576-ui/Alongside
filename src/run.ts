@@ -57,7 +57,22 @@ export function runTogether(send: (m: ClientMsg) => void, headOf: (id: string) =
   let endAt = 0;
   let nudged = false;
   let key = '';
-  let duration = RUN_MINUTES[1];
+  let duration = 10;
+  // The host's time bar: any whole minute from 5 to 20. Made once, so a redraw never interrupts a drag.
+  const length = document.createElement('label');
+  length.style.cssText = 'display:flex;align-items:center;gap:10px;flex-basis:100%;justify-content:center;';
+  const slider = Object.assign(document.createElement('input'), {
+    type: 'range', min: String(RUN_MINUTES.min), max: String(RUN_MINUTES.max), step: '1', value: String(duration),
+  });
+  slider.ariaLabel = 'Run length in minutes';
+  slider.style.cssText = 'flex:1;max-width:220px;accent-color:#fff;height:28px;';
+  const minutes = text(`${duration} min`);
+  minutes.style.cssText = 'min-width:52px;text-align:right;';
+  slider.oninput = () => {
+    duration = Number(slider.value);
+    minutes.textContent = `${duration} min`;
+  };
+  length.append(slider, minutes);
   let moving: 0 | 1 = 0;
   let audio: AudioContext | null = null;
   let wake: { release(): Promise<void> } | null = null;
@@ -141,14 +156,7 @@ export function runTogether(send: (m: ClientMsg) => void, headOf: (id: string) =
       const joined = [...thumbs.values()].filter((t) => t.host === myId()).length - 1;
       lobby.replaceChildren(
         text(joined ? `${joined} joined` : 'Waiting for others…'),
-        ...RUN_MINUTES.map((d) => {
-          const b = button(`${d} min`, () => {
-            duration = d;
-            showLobby();
-          });
-          if (d === duration) b.style.background = '#ffffff70'; // the chosen length: a brighter glass
-          return b;
-        }),
+        length,
         button(joined ? 'Start' : 'Run alone', () => send({ t: 'start', d: duration })),
         button('Cancel', () => send({ t: 'lower' })),
       );

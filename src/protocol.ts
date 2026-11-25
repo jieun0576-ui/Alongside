@@ -18,7 +18,7 @@ export const STONE_EVERY_MS = 1_000;
 export const BOAT_LIFE_S = 30 * 60; // boats float away after 30 minutes
 export const MAX_BOATS = 50; // oldest drops off first
 // Run Together
-export const RUN_MINUTES = [5, 10, 20];
+export const RUN_MINUTES = { min: 5, max: 20 }; // the host picks any whole minute in between
 export const MAX_RUNNERS = 4;
 export const RUN_PACE = 2.5; // metres per second while your phone says you're moving: an easy jog
 export const AWAY_MS = 60_000; // a runner who loses connection keeps their place this long
@@ -107,7 +107,7 @@ export function parseClient(raw: unknown): ClientMsg | null {
   if (t === 'stone' && num(x) && num(z) && inLake(x, z)) return { t, x: cm(x), z: cm(z) };
   if (t === 'raise' || t === 'lower') return { t };
   if (t === 'join' && isId(id)) return { t, id };
-  if (t === 'start' && RUN_MINUTES.includes(d as number)) return { t, d: d as number };
+  if (t === 'start' && Number.isInteger(d) && (d as number) >= RUN_MINUTES.min && (d as number) <= RUN_MINUTES.max) return { t, d: d as number };
   if (t === 'motion' && (m as Record<string, unknown>).m === 0) return { t, m: 0 };
   if (t === 'motion' && (m as Record<string, unknown>).m === 1) return { t, m: 1 };
   if (t === 'quit') return { t };

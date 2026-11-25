@@ -68,10 +68,13 @@ test('run messages: only real ids, set durations and on/off motion', () => {
   assert.deepEqual(parseClient('{"t":"raise"}'), { t: 'raise' });
   assert.deepEqual(parseClient(`{"t":"join","id":"${id}"}`), { t: 'join', id });
   assert.deepEqual(parseClient('{"t":"start","d":10}'), { t: 'start', d: 10 });
+  assert.deepEqual(parseClient('{"t":"start","d":7}'), { t: 'start', d: 7 });
   assert.deepEqual(parseClient('{"t":"motion","m":1}'), { t: 'motion', m: 1 });
   assert.deepEqual(parseClient('{"t":"quit","x":1}'), { t: 'quit' });
   for (const bad of [
-    '{"t":"start","d":7}', // not 5, 10 or 20
+    '{"t":"start","d":4}', // shorter than 5 minutes
+    '{"t":"start","d":21}', // longer than 20
+    '{"t":"start","d":7.5}', // whole minutes only
     '{"t":"join","id":"<b>hi</b>"}', // not an id
     '{"t":"join","id":5}',
     '{"t":"motion","m":2}',
