@@ -31,12 +31,12 @@ export function pickCharacter(start: number, onShow: (k: number) => void, onPick
   const row = document.createElement('div');
   row.style.cssText = 'display:flex;gap:14px;align-items:center;';
   const pill = 'border:none;border-radius:999px;background:#fbfaf6;color:#4d3a2a;font:inherit;';
-  // The arrows sit right beside the chosen character, half way up.
+  // The arrows sit at the box's left and right edges, half way up.
   const arrow = (text: string, label: string, by: number) => {
     const b = document.createElement('button');
     b.textContent = text;
     b.ariaLabel = label;
-    b.style.cssText = `${pill}position:absolute;top:50%;${by < 0 ? 'right' : 'left'}:calc(50% + 62px);` +
+    b.style.cssText = `${pill}position:absolute;top:50%;${by < 0 ? 'left' : 'right'}:8px;` +
       'transform:translateY(-50%);width:40px;height:40px;font-size:22px;line-height:1;opacity:.92;';
     b.onclick = () => show(wrap(k + by));
     return b;
