@@ -7,7 +7,7 @@ export function connect(onMessage: (m: ServerMsg) => void, onOpen: () => void, k
   const note = document.createElement('p');
   note.style.cssText =
     'position:fixed;left:16px;right:16px;bottom:24px;margin:0;text-align:center;' +
-    'font:15px system-ui,sans-serif;color:#4d3a2a;display:none;pointer-events:none';
+    'font:600 15px Quicksand,system-ui,sans-serif;color:#4d3a2a;display:none;pointer-events:none';
   document.body.appendChild(note);
 
   let ws: WebSocket;

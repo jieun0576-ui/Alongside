@@ -18,7 +18,7 @@ export const STONE_EVERY_MS = 1_000;
 export const BOAT_LIFE_S = 30 * 60; // boats float away after 30 minutes
 export const MAX_BOATS = 50; // oldest drops off first
 // Run Together
-export const RUN_MINUTES = [5, 10, 20];
+export const RUN_MINUTES = { min: 5, max: 20 }; // the host picks any whole minute in between
 export const MAX_RUNNERS = 4;
 export const RUN_PACE = 2.5; // metres per second while your phone says you're moving: an easy jog
 export const AWAY_MS = 60_000; // a runner who loses connection keeps their place this long
@@ -28,8 +28,8 @@ export const CHARACTERS = ['female', 'knight', 'male', 'worker', 'zombie'];
 // Floating Thoughts: a boat is only ever one of these colours, never free text.
 export const BOAT_COLOURS = ['#f2c6c2', '#f6dfa4', '#bfe0c5', '#b9d4ee', '#d8c8ec', '#fbfaf6'];
 
-// Where someone is heading, and whether they sit down when they get there.
-export type Pose = { x: number; z: number; s: 0 | 1 };
+// Where someone is heading, and whether they sit down when they get there: 1 on a bench, 2 on the stone edge by the water.
+export type Pose = { x: number; z: number; s: 0 | 1 | 2 };
 export type Person = Pose & { id: string; k: number }; // k: which character they chose
 export type Boat = { x: number; c: number; age: number }; // age in seconds when sent
 
@@ -100,14 +100,14 @@ export function parseClient(raw: unknown): ClientMsg | null {
   if (typeof m !== 'object' || m === null) return null;
   const { t, x, z, s, c, id, d } = m as Record<string, unknown>;
   // Each branch rebuilds the object so no extra fields ride along to other phones.
-  if (t === 'move' && num(x) && num(z) && inWalk(x, z) && (s === 0 || s === 1)) return { t, x: cm(x), z: cm(z), s };
+  if (t === 'move' && num(x) && num(z) && inWalk(x, z) && (s === 0 || s === 1 || (s === 2 && z <= WALK.minZ + 0.3))) return { t, x: cm(x), z: cm(z), s };
   if (t === 'boat' && Number.isInteger(c) && (c as number) >= 0 && (c as number) < BOAT_COLOURS.length) {
     return { t, c: c as number };
   }
   if (t === 'stone' && num(x) && num(z) && inLake(x, z)) return { t, x: cm(x), z: cm(z) };
   if (t === 'raise' || t === 'lower') return { t };
   if (t === 'join' && isId(id)) return { t, id };
-  if (t === 'start' && RUN_MINUTES.includes(d as number)) return { t, d: d as number };
+  if (t === 'start' && Number.isInteger(d) && (d as number) >= RUN_MINUTES.min && (d as number) <= RUN_MINUTES.max) return { t, d: d as number };
   if (t === 'motion' && (m as Record<string, unknown>).m === 0) return { t, m: 0 };
   if (t === 'motion' && (m as Record<string, unknown>).m === 1) return { t, m: 1 };
   if (t === 'quit') return { t };

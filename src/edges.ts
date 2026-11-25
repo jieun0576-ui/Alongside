@@ -16,7 +16,7 @@ export function edgeMarkers() {
       el.style.cssText = 'position:fixed;left:0;top:0;width:36px;height:36px;pointer-events:none;display:none;' +
         'filter:drop-shadow(0 0 2px #0004);';
       const num = document.createElement('span');
-      num.style.cssText = 'position:absolute;inset:0;font:600 14px/36px system-ui,sans-serif;text-align:center;color:#4d3a2a;';
+      num.style.cssText = 'position:absolute;inset:0;font:700 14px/36px Quicksand,system-ui,sans-serif;text-align:center;color:#4d3a2a;';
       el.appendChild(num);
       document.body.appendChild(el);
       m = { el, num };

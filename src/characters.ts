@@ -4,7 +4,7 @@ import { clone } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { CHARACTERS } from './protocol';
 
 export const HEIGHT = 1.5; // metres, every character the same, feet at y = 0
-export type Move = 'idle' | 'walk' | 'sprint' | 'sit';
+export type Move = 'idle' | 'walk' | 'sprint' | 'sit' | 'jump';
 
 type Source = { scene: Object3D; clips: AnimationClip[]; scale: number; lift: number };
 const loader = new GLTFLoader();
