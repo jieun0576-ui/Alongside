@@ -389,7 +389,7 @@ function setAiming(on: boolean) {
 
 // Floating Thoughts: pick a colour and let a paper boat go. No words, only colour.
 const palette = document.createElement('div');
-palette.style.cssText = 'position:fixed;right:16px;bottom:116px;display:none;gap:10px;';
+palette.style.cssText = 'position:fixed;right:16px;bottom:16px;display:none;gap:10px;'; // just below the buttons
 for (const [i, colour] of BOAT_COLOURS.entries()) {
   const dot = document.createElement('button');
   dot.ariaLabel = `Boat colour ${i + 1}`;
