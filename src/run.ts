@@ -159,7 +159,7 @@ export function runTogether(send: (m: ClientMsg) => void, headOf: (id: string) =
   // What I see at the bottom while my thumb is up: the host's choices, or a way to step out.
   function showLobby() {
     const mine = thumbs.get(myId());
-    raise.style.display = mine || endAt ? 'none' : '';
+    raise.style.display = mine || endAt ? 'none' : 'flex'; // flex keeps the icon centred
     if (!mine) return void (lobby.style.display = 'none');
     if (mine.host === myId()) {
       const joined = [...thumbs.values()].filter((t) => t.host === myId()).length - 1;
