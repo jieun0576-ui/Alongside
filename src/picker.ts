@@ -1,5 +1,5 @@
 import {
-  DirectionalLight, Group, HemisphereLight, PerspectiveCamera, Scene, WebGLRenderer,
+  DirectionalLight, Group, HemisphereLight, MeshStandardMaterial, PerspectiveCamera, Scene, WebGLRenderer,
 } from 'three';
 import { CHARACTERS } from './protocol';
 import { dropLook, makeLook, play, type Look } from './characters';
@@ -31,19 +31,24 @@ export function pickCharacter(start: number, onShow: (k: number) => void, onPick
   const row = document.createElement('div');
   row.style.cssText = 'display:flex;gap:14px;align-items:center;';
   const pill = 'border:none;border-radius:999px;background:#fbfaf6;color:#4d3a2a;font:inherit;';
+  // The arrows sit right beside the chosen character, half way up.
   const arrow = (text: string, label: string, by: number) => {
     const b = document.createElement('button');
     b.textContent = text;
     b.ariaLabel = label;
-    b.style.cssText = `${pill}width:48px;height:48px;font-size:24px;line-height:1;`;
+    b.style.cssText = `${pill}position:absolute;top:50%;${by < 0 ? 'right' : 'left'}:calc(50% + 62px);` +
+      'transform:translateY(-50%);width:40px;height:40px;font-size:22px;line-height:1;opacity:.92;';
     b.onclick = () => show(wrap(k + by));
     return b;
   };
   const choose = document.createElement('button');
   choose.textContent = 'This one';
   choose.style.cssText = `${pill}padding:12px 26px;font-weight:600;`;
-  row.append(arrow('‹', 'Previous character', -1), choose, arrow('›', 'Next character', 1));
-  box.append(title, canvas, row);
+  const stage = document.createElement('div');
+  stage.style.cssText = 'position:relative;width:100%;';
+  stage.append(canvas, arrow('‹', 'Previous character', -1), arrow('›', 'Next character', 1));
+  row.append(choose);
+  box.append(title, stage, row);
   layer.append(box);
   document.body.appendChild(layer);
 
@@ -83,6 +88,8 @@ export function pickCharacter(start: number, onShow: (k: number) => void, onPick
             dropLook(s.look);
           }
           s.look = look;
+          // The ones on the sides are darker, so the chosen one stands out.
+          if (s.side) for (const m of look.materials) (m as MeshStandardMaterial).color.multiplyScalar(0.5);
           s.g.add(look.model);
           play(look, 'idle');
         })
