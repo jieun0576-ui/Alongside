@@ -12,6 +12,7 @@ import { HEIGHT, dropLook, fade, makeLook, play, type Look } from './characters'
 import { pickCharacter } from './picker';
 import { hold, sound } from './sounds';
 import { seagulls } from './gulls';
+import { GLASS } from './style';
 import {
   BOARDWALK, BOAT_COLOURS, BOAT_EVERY_MS, CHARACTERS, RUN_PACE, STONE_EVERY_MS, STONE_REACH, inLake, trailSpot, type Pose, type Runner,
 } from './protocol';
@@ -343,11 +344,11 @@ function throwStone() {
 // The buttons only appear once you're standing or sitting by the water.
 const tools = document.createElement('div');
 tools.style.cssText = 'position:fixed;right:16px;bottom:64px;display:none;gap:10px;';
-const pill = 'border:none;border-radius:999px;font:15px system-ui,sans-serif;';
+const pill = 'border:none;border-radius:999px;';
 const button = (text: string) => {
   const b = document.createElement('button');
   b.textContent = text;
-  b.style.cssText = `padding:10px 16px;background:#fbfaf6;color:#4d3a2a;${pill}`;
+  b.style.cssText = `padding:10px 16px;${GLASS}`;
   return b;
 };
 const stoneButton = button('Throw a stone');

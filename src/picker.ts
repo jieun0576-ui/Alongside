@@ -1,3 +1,4 @@
+import { GLASS, LIGHT_TEXT } from './style';
 import {
   DirectionalLight, Group, HemisphereLight, MeshStandardMaterial, PerspectiveCamera, Scene, WebGLRenderer,
 } from 'three';
@@ -18,32 +19,32 @@ export function pickCharacter(start: number, onShow: (k: number) => void, onPick
   layer.style.cssText =
     'position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;justify-content:center;align-items:center;' +
     'gap:18px;padding:max(24px,env(safe-area-inset-top)) 16px max(32px,env(safe-area-inset-bottom));' +
-    'background:#0000002e;font:15px system-ui,sans-serif;color:#fbfaf6;';
+    `background:#0000002e;${LIGHT_TEXT}font-size:15px;`;
   const box = document.createElement('div');
   box.style.cssText =
     'width:min(360px,100%);border-radius:24px;background:#000000cc;display:flex;flex-direction:column;' +
     'align-items:center;padding:18px 0 20px;gap:14px;box-shadow:0 8px 30px #0004;';
   const title = document.createElement('p');
   title.textContent = 'Choose your character';
-  title.style.cssText = 'margin:0;font-size:18px;font-weight:600;';
+  title.style.cssText = 'margin:0;font-size:20px;letter-spacing:.5px;';
   const canvas = document.createElement('canvas');
   canvas.style.cssText = 'width:100%;height:min(300px,45vh);display:block;touch-action:manipulation;';
   const row = document.createElement('div');
   row.style.cssText = 'display:flex;gap:14px;align-items:center;';
-  const pill = 'border:none;border-radius:999px;background:#fbfaf6;color:#4d3a2a;font:inherit;';
-  // The arrows sit at the box's left and right edges, half way up.
+  const pill = GLASS;
+  // The arrows sit on the box's left and right edges (half in, half out), half way up.
   const arrow = (text: string, label: string, by: number) => {
     const b = document.createElement('button');
     b.textContent = text;
     b.ariaLabel = label;
-    b.style.cssText = `${pill}position:absolute;top:50%;${by < 0 ? 'left' : 'right'}:8px;` +
-      'transform:translateY(-50%);width:40px;height:40px;font-size:22px;line-height:1;opacity:.92;';
+    b.style.cssText = `${pill}position:absolute;top:50%;${by < 0 ? 'left' : 'right'}:-17px;` +
+      'transform:translateY(-50%);width:34px;height:34px;font-size:19px;line-height:1;opacity:.92;';
     b.onclick = () => show(wrap(k + by));
     return b;
   };
   const choose = document.createElement('button');
   choose.textContent = 'This one';
-  choose.style.cssText = `${pill}padding:12px 26px;font-weight:600;`;
+  choose.style.cssText = `${pill}padding:12px 28px;font-size:16px;border-radius:16px;`;
   const stage = document.createElement('div');
   stage.style.cssText = 'position:relative;width:100%;';
   stage.append(canvas, arrow('‹', 'Previous character', -1), arrow('›', 'Next character', 1));

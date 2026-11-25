@@ -1,11 +1,12 @@
+import { GLASS, LIGHT_TEXT } from './style';
 import { RUN_MINUTES, type ClientMsg, type Thumb } from './protocol';
 
 // Run Together, the phone side: raised thumbs, the host's choices, the time left, and whether you're moving.
 // The phone never says how far or how fast; it only says "moving" or "resting".
 const MOVING_SPREAD = 1.8; // m/s²: how much the phone must shake (spread of readings over 2 s) to count as moving
 const OVERDUE_MS = 3000; // if the room hasn't ended the run this long after time is up, nudge it
-const font = 'font:15px system-ui,sans-serif;color:#4d3a2a;';
-const pill = 'border:none;border-radius:999px;padding:10px 16px;background:#fbfaf6;color:#4d3a2a;font:15px system-ui,sans-serif;';
+const font = `${LIGHT_TEXT}font-size:15px;`;
+const pill = `padding:10px 16px;${GLASS}`;
 const THUMB = '<svg width="26" height="26" viewBox="0 0 24 24" fill="#fff"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>';
 
 type Screen = { x: number; y: number } | null; // where someone's head is on screen, or null when off screen
@@ -141,7 +142,7 @@ export function runTogether(send: (m: ClientMsg) => void, headOf: (id: string) =
             duration = d;
             showLobby();
           });
-          if (d === duration) b.style.background = '#e9dccb';
+          if (d === duration) b.style.background = '#ffffff70'; // the chosen length: a brighter glass
           return b;
         }),
         button(joined ? 'Start' : 'Run alone', () => send({ t: 'start', d: duration })),
@@ -218,7 +219,7 @@ export function runTogether(send: (m: ClientMsg) => void, headOf: (id: string) =
       for (const n of numbers.splice(0)) n.remove();
       for (const [i] of ids.entries()) {
         const n = text(String(i + 1));
-        n.style.cssText = `position:fixed;display:none;width:24px;height:24px;border-radius:50%;background:#fbfaf6;` +
+        n.style.cssText = `position:fixed;display:none;width:24px;height:24px;border-radius:50%;background:#00000080;` +
           `text-align:center;line-height:24px;pointer-events:none;${font}`;
         document.body.appendChild(n);
         numbers.push(n);
@@ -289,7 +290,7 @@ function showHowTo() {
   const card = document.createElement('div');
   card.style.cssText =
     'position:fixed;z-index:5;left:50%;top:50%;transform:translate(-50%,-50%);padding:18px 26px 14px;border-radius:24px;' +
-    'background:#fbfaf6e8;pointer-events:none;text-align:center;font:15px system-ui,sans-serif;color:#4d3a2a;';
+    'background:#fbfaf6e8;pointer-events:none;text-align:center;font:600 15px Quicksand,system-ui,sans-serif;color:#4d3a2a;';
   card.innerHTML = `<svg width="96" height="120" viewBox="0 0 96 120" fill="none" stroke="#4d3a2a" stroke-width="6"
     stroke-linecap="round" stroke-linejoin="round">
     <style>
