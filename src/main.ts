@@ -451,6 +451,7 @@ function bumps() {
       bumped.set(pair, now);
       a.hopUntil = b.hopUntil = now + HOP_MS;
       hops.at((a.body.position.x + b.body.position.x) / 2, (a.body.position.z + b.body.position.z) / 2);
+      sound('hop', 1.3); // Hoon's hop sound, 30% louder
       if (a !== me) continue; // only step your own character aside, away from the other
       const side = dx ? Math.sign(dx) : ia < ib ? -1 : 1;
       setTimeout(() => {

@@ -1,7 +1,7 @@
 // Hoon's sound effects (public/sounds). Phones only allow sound after a tap, so nothing loads
 // or plays until the first one; after that, sounds can play at any time, even ones others cause.
-type Name = 'boat' | 'click' | 'firework' | 'ripple' | 'walk' | 'wave';
-const NAMES: Name[] = ['boat', 'click', 'firework', 'ripple', 'walk', 'wave'];
+type Name = 'boat' | 'click' | 'firework' | 'hop' | 'ripple' | 'walk' | 'wave';
+const NAMES: Name[] = ['boat', 'click', 'firework', 'hop', 'ripple', 'walk', 'wave'];
 
 let ctx: AudioContext | null = null;
 const buffers = new Map<Name, AudioBuffer>();
