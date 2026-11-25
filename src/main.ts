@@ -10,6 +10,7 @@ import { fireworks } from './fireworks';
 import { edgeMarkers } from './edges';
 import { HEIGHT, dropLook, fade, makeLook, play, type Look } from './characters';
 import { pickCharacter } from './picker';
+import { showHelp } from './help';
 import { hold, sound } from './sounds';
 import { seagulls } from './gulls';
 import { GLASS } from './style';
@@ -459,6 +460,7 @@ pickCharacter(
   (k) => setLook(me, k),
   (k) => {
     send({ t: 'look', k });
+    showHelp();
     try {
       localStorage.setItem('look', String(k));
     } catch {
